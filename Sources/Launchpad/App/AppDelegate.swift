@@ -29,6 +29,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         registerHotKeys()
         observeNotifications()
+
+        // Тестовый флаг: сразу открыть Launchpad.
+        if CommandLine.arguments.contains("--open") {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+                self?.show()
+            }
+        }
     }
 
     // MARK: - Построение UI

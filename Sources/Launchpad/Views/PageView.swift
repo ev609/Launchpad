@@ -1,73 +1,130 @@
 import SwiftUI
-import UniformTypeIdentifiers
 
-/// Одна страница сетки приложений с поддержкой перетаскивания.
-struct PageView: View {
-    let page: Page
-    let pageIndex: Int
-    @ObservedObject var model: LaunchpadModel
-    @Binding var draggingID: String?
+/// Геометрия сетки: размеры ячеек и перевод «точка ↔ слот».
+struct GridMetrics {
+    let size: CGSize
+    let columns: Int
+    let rows: Int
 
-    private var columns: [GridItem] {
-        Array(repeating: GridItem(.flexible(), spacing: 24), count: model.columns)
+    let topInset: CGFloat = 96     // место под поле поиска
+    let bottomInset: CGFloat = 72  // место под точки страниц
+    let sidePad: CGFloat = 80
+
+    var gridHeight: CGFloat { max(1, size.height - topInset - bottomInset) }
+    var cellW: CGFloat { max(1, (size.width - 2 * sidePad) / CGFloat(columns)) }
+    var cellH: CGFloat { max(1, gridHeight / CGFloat(rows)) }
+
+    /// Центр слота с индексом `slot`.
+    func center(_ slot: Int) -> CGPoint {
+        let r = slot / columns
+        let c = slot % columns
+        let x = sidePad + (CGFloat(c) + 0.5) * cellW
+        let y = topInset + (CGFloat(r) + 0.5) * cellH
+        return CGPoint(x: x, y: y)
     }
 
-    var body: some View {
-        LazyVGrid(columns: columns, spacing: 28) {
-            ForEach(page.items) { item in
-                GridCell(item: item,
-                         pageIndex: pageIndex,
-                         model: model,
-                         draggingID: $draggingID)
-            }
-        }
-        .padding(.horizontal, 80)
-        .padding(.vertical, 20)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    /// Индекс слота (позиция вставки) под точкой `p`, ограниченный `[0, count]`.
+    func slot(at p: CGPoint, count: Int) -> Int {
+        let c = min(max(Int(((p.x - sidePad) / cellW).rounded(.down)), 0), columns - 1)
+        let r = min(max(Int(((p.y - topInset) / cellH).rounded(.down)), 0), rows - 1)
+        return min(max(r * columns + c, 0), count)
     }
 }
 
-/// Ячейка сетки: приложение или папка.
-struct GridCell: View {
-    let item: LaunchpadItem
-    let pageIndex: Int
-    @ObservedObject var model: LaunchpadModel
-    @Binding var draggingID: String?
+/// Состояние активного перетаскивания.
+struct DragState {
+    var itemID: String
+    var originPage: Int
+    var location: CGPoint       // в координатах экрана ("root")
+    var insertionIndex: Int
+    var folderTargetID: String? // если задержались над иконкой — цель для папки
+}
 
-    @State private var isTargeted = false
+/// Одна страница сетки. Иконки расставлены вручную по слотам, чтобы поддержать
+/// расступание и «дыру» под перетаскиваемый элемент.
+struct PageView: View {
+    let page: Page
+    let pageIndex: Int
+    let metrics: GridMetrics
+    let drag: DragState?
+    @ObservedObject var model: LaunchpadModel
+
+    let onBeginDrag: (LaunchpadItem, DragGesture.Value) -> Void
+    let onDragChange: (DragGesture.Value) -> Void
+    let onDragEnd: (DragGesture.Value) -> Void
 
     var body: some View {
-        content
-            .frame(width: 120, height: 128)
-            .scaleEffect(draggingID == item.id ? 0.85 : (isTargeted ? 1.12 : 1.0))
-            .opacity(draggingID == item.id ? 0.4 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isTargeted)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: draggingID)
-            .contentShape(Rectangle())
-            .onTapGesture { activate() }
-            .onDrag {
-                draggingID = item.id
-                return NSItemProvider(object: item.id as NSString)
+        ZStack(alignment: .topLeading) {
+            Color.clear
+            ForEach(Array(layout.enumerated()), id: \.element.item.id) { _, placed in
+                cell(placed.item)
+                    .frame(width: metrics.cellW, height: metrics.cellH)
+                    .position(metrics.center(placed.slot))
+                    .animation(.spring(response: 0.32, dampingFraction: 0.75), value: placed.slot)
             }
-            .onDrop(of: [.text],
-                    delegate: CellDropDelegate(targetID: item.id,
-                                               pageIndex: pageIndex,
-                                               model: model,
-                                               draggingID: $draggingID,
-                                               isTargeted: $isTargeted))
-    }
-
-    @ViewBuilder
-    private var content: some View {
-        switch item {
-        case .app(let app):
-            AppIconView(app: app)
-        case .folder(let folder):
-            FolderIconView(folder: folder)
         }
     }
 
-    private func activate() {
+    // MARK: - Раскладка со «дырой»
+
+    private struct Placed { let item: LaunchpadItem; let slot: Int }
+
+    /// Вычисляет, в каком слоте показать каждый элемент с учётом перетаскивания.
+    private var layout: [Placed] {
+        var items = page.items
+        // Перетаскиваемый элемент со своей страницы убираем (он «летит» отдельно).
+        if let d = drag, let idx = items.firstIndex(where: { $0.id == d.itemID }) {
+            items.remove(at: idx)
+        }
+
+        let isTargetPage = drag != nil && pageIndex == model.currentPage
+        // При режиме «папка» дыру не делаем — просто подсвечиваем цель.
+        let hole = (isTargetPage && drag?.folderTargetID == nil) ? drag?.insertionIndex : nil
+
+        return items.enumerated().map { p, item in
+            var slot = p
+            if let hole, p >= hole { slot = p + 1 }
+            return Placed(item: item, slot: slot)
+        }
+    }
+
+    // MARK: - Ячейка
+
+    @ViewBuilder
+    private func cell(_ item: LaunchpadItem) -> some View {
+        let isFolderTarget = drag?.folderTargetID == item.id
+        content(item)
+            .scaleEffect(isFolderTarget ? 1.18 : 1.0)
+            .background(
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.white.opacity(isFolderTarget ? 0.15 : 0))
+                    .padding(6)
+            )
+            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFolderTarget)
+            .contentShape(Rectangle())
+            .onTapGesture { activate(item) }
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 8, coordinateSpace: .named("root"))
+                    .onChanged { value in
+                        if drag == nil {
+                            onBeginDrag(item, value)
+                        } else {
+                            onDragChange(value)
+                        }
+                    }
+                    .onEnded { value in onDragEnd(value) }
+            )
+    }
+
+    @ViewBuilder
+    private func content(_ item: LaunchpadItem) -> some View {
+        switch item {
+        case .app(let app):       AppIconView(app: app)
+        case .folder(let folder): FolderIconView(folder: folder)
+        }
+    }
+
+    private func activate(_ item: LaunchpadItem) {
         switch item {
         case .app(let app):
             AppLauncher.launch(app)
@@ -77,88 +134,5 @@ struct GridCell: View {
                 model.openFolderID = folder.id
             }
         }
-    }
-}
-
-/// Делегат сброса для ячейки: центр — объединение в папку, край — перестановка.
-struct CellDropDelegate: DropDelegate {
-    let targetID: String
-    let pageIndex: Int
-    let model: LaunchpadModel
-    @Binding var draggingID: String?
-    @Binding var isTargeted: Bool
-
-    private let cellWidth: CGFloat = 120
-
-    func dropEntered(info: DropInfo) {
-        if draggingID != nil, draggingID != targetID, canCombine {
-            isTargeted = true
-        }
-    }
-
-    func dropExited(info: DropInfo) {
-        isTargeted = false
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        defer {
-            isTargeted = false
-            draggingID = nil
-        }
-        guard let source = draggingID, source != targetID else { return false }
-
-        // Центральная треть ячейки — попытка объединить в папку.
-        let x = info.location.x
-        let central = x > cellWidth * 0.28 && x < cellWidth * 0.72
-        if central && canCombine {
-            if model.combine(source, into: targetID) { return true }
-        }
-        model.move(source, before: targetID, onPage: pageIndex)
-        return true
-    }
-
-    /// Можно объединять, если цель — папка либо оба элемента приложения.
-    private var canCombine: Bool {
-        guard let source = draggingID else { return false }
-        return isFolder(targetID) || (isApp(source) && isApp(targetID))
-    }
-
-    private func isFolder(_ id: String) -> Bool { id.hasPrefix("folder:") }
-    private func isApp(_ id: String) -> Bool { id.hasPrefix("app:") }
-}
-
-/// Зона у края экрана: при наведении перетаскиваемого элемента листает страницы,
-/// при сбросе — переносит элемент на соседнюю страницу.
-struct EdgeDropDelegate: DropDelegate {
-    let direction: Int   // -1 предыдущая, +1 следующая
-    let model: LaunchpadModel
-    @Binding var draggingID: String?
-    @Binding var isActive: Bool
-
-    func dropEntered(info: DropInfo) {
-        guard draggingID != nil else { return }
-        isActive = true
-        model.beginEdgeHover(direction)
-    }
-
-    func dropExited(info: DropInfo) {
-        isActive = false
-        model.cancelEdgeHover()
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        DropProposal(operation: .move)
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        defer { isActive = false; draggingID = nil }
-        model.cancelEdgeHover()
-        guard let source = draggingID else { return false }
-        model.moveItem(source, toPage: model.currentPage + direction)
-        return true
     }
 }

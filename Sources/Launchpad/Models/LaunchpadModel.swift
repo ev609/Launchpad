@@ -301,11 +301,39 @@ final class LaunchpadModel: ObservableObject {
         save()
     }
 
+    /// Номер страницы, на которой находится элемент.
+    func pageIndex(of itemID: String) -> Int? {
+        locate(itemID)?.page
+    }
+
+    /// Элемент по идентификатору.
+    func item(withID id: String) -> LaunchpadItem? {
+        for page in pages {
+            if let found = page.items.first(where: { $0.id == id }) { return found }
+        }
+        return nil
+    }
+
+    /// Переносит элемент на страницу `p` в позицию `index` (жестовое перетаскивание).
+    func placeItem(_ sourceID: String, onPage p: Int, at index: Int) {
+        guard let from = locate(sourceID), p >= 0, p < pages.count else { return }
+        let item = pages[from.page].items.remove(at: from.index)
+        var idx = index
+        // Если элемент был на этой же странице до места вставки — индекс сдвигается.
+        if from.page == p && from.index < idx { idx -= 1 }
+        idx = max(0, min(idx, pages[p].items.count))
+        pages[p].items.insert(item, at: idx)
+        pages = normalize(pages)
+        clampCurrentPage()
+        save()
+    }
+
     /// Листает страницы во время перетаскивания к краю экрана.
     /// У правого края последней страницы создаёт новую пустую страницу.
     func flipDuringDrag(_ direction: Int) {
         if direction > 0 {
-            if currentPage >= pages.count - 1 {
+            // Новую страницу создаём, только если последняя не пуста.
+            if currentPage >= pages.count - 1, !(pages.last?.items.isEmpty ?? true) {
                 pages.append(Page(items: []))
             }
             nextPage()
