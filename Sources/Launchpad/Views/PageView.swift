@@ -42,6 +42,8 @@ struct DragState {
     var insertionIndex: Int
     var folderTargetID: String? // если задержались над иконкой — цель для папки
     var reflow: Bool = true     // расступаться ли соседям (false при наведении на иконку)
+    var fromSearch: Bool = false // драг начат из результатов поиска
+    var searchApp: AppEntry?     // перетаскиваемое приложение (для драга из поиска)
 }
 
 /// Одна страница сетки. Иконки расставлены вручную по слотам, чтобы поддержать

@@ -30,8 +30,9 @@ struct LaunchpadRootView: View {
                         }
                     }
 
-                // Сетка и подсказки краёв — отдельным слоем, только вне поиска.
-                if !model.isSearching {
+                // Сетка и подсказки краёв. Показываем вне поиска, А ТАКЖЕ во время
+                // драга из поиска — чтобы было видно, на какую страницу кладём.
+                if !model.isSearching || drag != nil {
                     pager(metrics)
                     edgeHint(metrics, direction: -1)
                     edgeHint(metrics, direction: 1)
@@ -42,19 +43,28 @@ struct LaunchpadRootView: View {
                 VStack(spacing: 0) {
                     searchField.padding(.top, safeTop + 16)
                     if model.isSearching {
-                        SearchResultsView(model: model)
+                        // Во время драга из поиска результаты остаются смонтированными
+                        // (ради живого жеста), но прячутся — сверху видна сетка.
+                        SearchResultsView(model: model,
+                                          onBeginDrag: { app, value in beginSearchDrag(app, value, metrics) },
+                                          onDragChange: { value in updateDrag(value, metrics) },
+                                          onDragEnd: { _ in endDrag() })
+                            .opacity(drag != nil ? 0 : 1)
                     } else {
                         Spacer()
                         pageDots.padding(.bottom, 24)
                     }
                 }
 
-                // Летящая под курсором иконка.
-                if let d = drag, let item = model.item(withID: d.itemID) {
-                    draggedIcon(item, metrics: metrics)
-                        .position(d.location)
-                        .allowsHitTesting(false)
-                        .transition(.identity)
+                // Летящая под курсором иконка (из сетки или из поиска).
+                if let d = drag {
+                    let item: LaunchpadItem? = d.searchApp.map { .app($0) } ?? model.item(withID: d.itemID)
+                    if let item {
+                        draggedIcon(item, metrics: metrics)
+                            .position(d.location)
+                            .allowsHitTesting(false)
+                            .transition(.identity)
+                    }
                 }
 
                 // Оверлей открытой папки.
@@ -169,6 +179,20 @@ struct LaunchpadRootView: View {
         updateDrag(value, metrics, initial: &state)
     }
 
+    /// Начало драга из результатов поиска: приложение уже есть в раскладке,
+    /// перемещаем его на выбранную страницу.
+    private func beginSearchDrag(_ app: AppEntry, _ value: DragGesture.Value, _ metrics: GridMetrics) {
+        var state = DragState(itemID: "app:" + app.id,
+                              originPage: model.currentPage,
+                              location: value.location,
+                              insertionIndex: 0,
+                              folderTargetID: nil,
+                              fromSearch: true,
+                              searchApp: app)
+        drag = state
+        updateDrag(value, metrics, initial: &state)
+    }
+
     private func updateDrag(_ value: DragGesture.Value, _ metrics: GridMetrics) {
         guard var d = drag else { return }
         updateDrag(value, metrics, initial: &d)
@@ -233,7 +257,11 @@ struct LaunchpadRootView: View {
         model.cancelEdgeHover()
         guard let d = drag else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-            if let target = d.folderTargetID {
+            if d.fromSearch, let app = d.searchApp {
+                // Драг из поиска: кладём приложение на текущую страницу и выходим из поиска.
+                model.relocateApp(app, toPage: model.currentPage, at: d.insertionIndex)
+                model.searchText = ""
+            } else if let target = d.folderTargetID {
                 model.combine(d.itemID, into: target)
             } else {
                 model.placeItem(d.itemID, onPage: model.currentPage, at: d.insertionIndex)
@@ -244,9 +272,14 @@ struct LaunchpadRootView: View {
     }
 }
 
-/// Сетка результатов поиска.
+/// Сетка результатов поиска. Иконки можно перетаскивать на сетку для сортировки.
 struct SearchResultsView: View {
     @ObservedObject var model: LaunchpadModel
+    let onBeginDrag: (AppEntry, DragGesture.Value) -> Void
+    let onDragChange: (DragGesture.Value) -> Void
+    let onDragEnd: (DragGesture.Value) -> Void
+
+    @State private var draggingAppID: String?
 
     private var columns: [GridItem] {
         Array(repeating: GridItem(.flexible(), spacing: 24), count: model.columns)
@@ -262,6 +295,21 @@ struct SearchResultsView: View {
                             AppLauncher.launch(app)
                             NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
                         }
+                        .highPriorityGesture(
+                            DragGesture(minimumDistance: 8, coordinateSpace: .named("root"))
+                                .onChanged { value in
+                                    if draggingAppID == nil {
+                                        draggingAppID = app.id
+                                        onBeginDrag(app, value)
+                                    } else {
+                                        onDragChange(value)
+                                    }
+                                }
+                                .onEnded { value in
+                                    draggingAppID = nil
+                                    onDragEnd(value)
+                                }
+                        )
                 }
             }
             .padding(.horizontal, 80)

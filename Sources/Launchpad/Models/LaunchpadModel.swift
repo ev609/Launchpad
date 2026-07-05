@@ -347,6 +347,50 @@ final class LaunchpadModel: ObservableObject {
         locate(itemID)?.page
     }
 
+    /// Удаляет приложение отовсюду (верхний уровень и из папок).
+    private func removeAppEverywhere(_ appID: String) {
+        for p in pages.indices {
+            var items = pages[p].items
+            var changed = false
+            var result: [LaunchpadItem] = []
+            for item in items {
+                switch item {
+                case .app(let a):
+                    if a.id == appID { changed = true; continue }
+                    result.append(item)
+                case .folder(var f):
+                    if f.apps.contains(where: { $0.id == appID }) {
+                        f.apps.removeAll { $0.id == appID }
+                        changed = true
+                        if f.apps.count == 1 { result.append(.app(f.apps[0])) }
+                        else if !f.apps.isEmpty { result.append(.folder(f)) }
+                        // пустая папка — выкидываем
+                    } else {
+                        result.append(item)
+                    }
+                }
+            }
+            if changed { items = result; pages[p].items = items }
+        }
+    }
+
+    /// Перемещает приложение (найденное поиском) на страницу `p` в позицию `index`,
+    /// вынимая его из прежнего места (в т.ч. из папки).
+    func relocateApp(_ app: AppEntry, toPage p: Int, at index: Int) {
+        removeAppEverywhere(app.id)
+        var target = p
+        if target < 0 { target = 0 }
+        if target >= pages.count {
+            pages.append(Page(items: []))
+            target = pages.count - 1
+        }
+        let idx = max(0, min(index, pages[target].items.count))
+        pages[target].items.insert(.app(app), at: idx)
+        pages = normalize(pages)
+        clampCurrentPage()
+        save()
+    }
+
     /// Элемент по идентификатору.
     func item(withID id: String) -> LaunchpadItem? {
         for page in pages {
