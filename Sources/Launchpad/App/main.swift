@@ -9,6 +9,22 @@ MainActor.assumeIsolated {
         Diagnostics.dumpImport()
         exit(0)
     }
+    if CommandLine.arguments.contains("--mt-size") {
+        print("MTTouch stride = \(MemoryLayout<MTTouch>.stride) (ожидается 96)")
+        exit(0)
+    }
+    if CommandLine.arguments.contains("--mt-test") {
+        let mt = MultitouchManager()
+        mt.start()
+        print("Трекпад-устройств найдено: \(mt.deviceCount)")
+        print("Коснитесь трекпада несколькими пальцами (4 сек)…")
+        let deadline = Date().addingTimeInterval(4)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+        print("Максимум одновременных касаний: \(mt.maxTouchesSeen)")
+        exit(0)
+    }
 
     let app = NSApplication.shared
     let delegate = AppDelegate()

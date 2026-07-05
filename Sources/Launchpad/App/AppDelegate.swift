@@ -24,9 +24,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var scrollHandled = false
     private var scrollCooldown = false
 
-    // Глобальный монитор щипка (открытие Launchpad жестом).
-    private var magnifyMonitor: Any?
-    private var magnifyAccum: CGFloat = 0
+    // Распознавание щипка трекпадом (открытие Launchpad жестом).
+    private let multitouch = MultitouchManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.load()
@@ -34,7 +33,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         registerHotKeys()
         observeNotifications()
-        installMagnifyMonitor()
+
+        // Щипок трекпадом (несколько пальцев внутрь) открывает Launchpad.
+        multitouch.onPinchIn = { [weak self] in
+            guard let self, !self.window.isVisible else { return }
+            self.show()
+        }
+        multitouch.start()
 
         // Тестовый флаг: сразу открыть Launchpad.
         if CommandLine.arguments.contains("--open") {
@@ -231,28 +236,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
                 self?.scrollCooldown = false
             }
-        }
-    }
-
-    // MARK: - Открытие щипком (глобальный жест magnify)
-
-    private func installMagnifyMonitor() {
-        magnifyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .magnify) { [weak self] event in
-            MainActor.assumeIsolated { self?.handleGlobalMagnify(event) }
-        }
-    }
-
-    private func handleGlobalMagnify(_ event: NSEvent) {
-        guard !window.isVisible else { return } // уже открыт
-        if event.phase == .began { magnifyAccum = 0 }
-        magnifyAccum += event.magnification
-        // Заметный щипок «внутрь» открывает Launchpad.
-        if magnifyAccum < -0.3 {
-            magnifyAccum = 0
-            show()
-        }
-        if event.phase == .ended || event.phase == .cancelled {
-            magnifyAccum = 0
         }
     }
 
