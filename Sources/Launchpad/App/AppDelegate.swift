@@ -50,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         registerHotKeys()
         observeNotifications()
+        firstRunSetup()
 
         // Щипок трекпадом: сведение пальцев открывает, разведение — закрывает.
         multitouch.onPinchIn = { [weak self] in
@@ -387,6 +388,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let me = NSRunningApplication.current
         return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .contains { $0.processIdentifier != me.processIdentifier }
+    }
+
+    // MARK: - Первый запуск
+
+    /// При первом запуске на любой машине делаем ланч резидентным автоматически:
+    /// прописываем автозапуск при входе (login item) и авто-перезапуск (keep-alive).
+    /// Так глобальный хоткей работает «из коробки» — процесс, который его слушает,
+    /// поднимается при каждом входе и переживает крах. macOS не позволяет
+    /// приложению самому назначить системную клавишу, переживающую его смерть
+    /// (защита ОС) — поэтому единственный надёжный путь «работает везде сам» —
+    /// держать ланч запущенным.
+    private func firstRunSetup() {
+        let key = "didFirstRunSetup"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        LoginItem.setEnabled(true)
+        KeepAliveService.setEnabled(true)
+        loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
+        keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
     }
 
     // MARK: - Обновления
