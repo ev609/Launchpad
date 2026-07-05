@@ -31,16 +31,28 @@ final class LayoutStore {
     let fileURL: URL
 
     init() {
-        let base = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Launchpad", isDirectory: true)
+        // Изоляция для тестов: если задан LAUNCHPAD_SUPPORT_DIR — храним там,
+        // чтобы тестовые прогоны не трогали реальную раскладку пользователя.
+        let base: URL
+        if let custom = ProcessInfo.processInfo.environment["LAUNCHPAD_SUPPORT_DIR"], !custom.isEmpty {
+            base = URL(fileURLWithPath: custom, isDirectory: true)
+        } else {
+            base = FileManager.default
+                .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Launchpad", isDirectory: true)
+        }
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         fileURL = base.appendingPathComponent("layout.json")
     }
 
     func load() -> Layout? {
         guard let data = try? Data(contentsOf: fileURL) else { return nil }
-        return try? JSONDecoder().decode(Layout.self, from: data)
+        if let layout = try? JSONDecoder().decode(Layout.self, from: data) {
+            return layout
+        }
+        // Файл есть, но не декодируется — сохраняем копию, чтобы не потерять молча.
+        try? data.write(to: fileURL.appendingPathExtension("corrupt"), options: .atomic)
+        return nil
     }
 
     func save(_ layout: Layout) {
