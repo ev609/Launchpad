@@ -31,13 +31,30 @@
 - macOS 13 (Ventura) и новее
 - Swift 5.9+ (входит в Xcode или Command Line Tools — полный Xcode **не нужен**)
 
-## Сборка и запуск
+## Установка
+
+**Готовый DMG** (проще всего): скачайте `Launchpad-x.y.z.dmg` из
+[Releases](https://github.com/ev609/Launchpad/releases), откройте и перетащите
+Launchpad в Applications. Ad-hoc подпись — при первом запуске снимите карантин:
+`xattr -dr com.apple.quarantine /Applications/Launchpad.app`.
+
+**Из исходников:**
 
 ```bash
 git clone <repo> Launchpad && cd Launchpad
-./scripts/build_app.sh release
+./scripts/build_app.sh release   # или ./scripts/install.sh — сразу в /Applications
 open build/Launchpad.app
 ```
+
+Дальше приложение **обновляется само** через GitHub Releases (меню
+«Проверить обновления…» и тихая проверка при запуске).
+
+### Скрипты сборки
+
+- `scripts/build_app.sh` — собрать `.app`
+- `scripts/install.sh` — собрать и установить в `/Applications`
+- `scripts/make_dmg.sh` — собрать DMG для ручной раздачи
+- `scripts/release.sh 0.2.0` — выпустить релиз (zip + dmg) в GitHub Releases
 
 Приложение появится в строке меню (иконка сетки 3×3). Нажмите на неё или `F4`,
 чтобы открыть Launchpad.

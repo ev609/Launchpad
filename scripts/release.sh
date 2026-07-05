@@ -15,10 +15,14 @@ echo "==> Сборка иконки и .app"
 [ -f Resources/AppIcon.icns ] || ./scripts/make_icon.sh
 ./scripts/build_app.sh release
 
-echo "==> Упаковка zip"
+echo "==> Упаковка zip (для авто-обновления)"
 ZIP="build/Launchpad.zip"
 rm -f "$ZIP"
 ditto -c -k --keepParent build/Launchpad.app "$ZIP"
+
+echo "==> Упаковка DMG (для ручной установки)"
+DMG="build/Launchpad-$VERSION.dmg"
+./scripts/make_dmg.sh >/dev/null
 
 echo "==> Коммит версии + тег v$VERSION"
 git add Resources/Info.plist
@@ -27,11 +31,11 @@ git tag "v$VERSION" 2>/dev/null || echo "(тег уже есть)"
 git push origin HEAD 2>/dev/null || echo "(git push HEAD пропущен)"
 git push origin "v$VERSION" 2>/dev/null || echo "(git push тега пропущен)"
 
-echo "==> GitHub Release"
+echo "==> GitHub Release (zip + dmg)"
 if gh release view "v$VERSION" >/dev/null 2>&1; then
-    gh release upload "v$VERSION" "$ZIP" --clobber
+    gh release upload "v$VERSION" "$ZIP" "$DMG" --clobber
 else
-    gh release create "v$VERSION" "$ZIP" --title "v$VERSION" --notes "Launchpad v$VERSION"
+    gh release create "v$VERSION" "$ZIP" "$DMG" --title "v$VERSION" --notes "Launchpad v$VERSION"
 fi
 
 echo "==> Готово: релиз v$VERSION. Клиенты обновятся при следующей проверке."
