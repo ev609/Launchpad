@@ -81,10 +81,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                backing: .buffered,
                                defer: false)
         window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
-        // БЕЗ .canJoinAllSpaces/.moveToActiveSpace — иначе окно висит на всех
-        // рабочих столах или следует за ними. Окно остаётся на том пространстве,
-        // где открыто; при смене стола закрывается (наблюдатель ниже).
-        window.collectionBehavior = [.fullScreenAuxiliary, .stationary]
+        // .moveToActiveSpace: окно приходит на ТЕКУЩЕЕ пространство при активации
+        // (иначе ордерится на старом столе и система туда «прыгает»). НЕ
+        // .canJoinAllSpaces (тот вешал окно на все столы). Закрытие при смене
+        // стола — наблюдатель activeSpaceDidChange ниже.
+        window.collectionBehavior = [.moveToActiveSpace, .fullScreenAuxiliary]
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
