@@ -19,7 +19,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var loginItemMenuItem: NSMenuItem?
     private var keepAliveMenuItem: NSMenuItem?
     private var updateMenuItem: NSMenuItem?
+    private var autoUpdateMenuItem: NSMenuItem?
     private var pendingUpdate: Updater.Update?
+    private var updateTimer: Timer?
     private var hotKeys: [GlobalHotKey] = []
 
     // Мониторы событий (активны только при открытом окне).
@@ -60,9 +62,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         multitouch.start()
 
-        // Тихая проверка обновлений при запуске (через 4 с, не мешая старту).
+        // Проверка обновлений при запуске (через 4 с, не мешая старту) и далее
+        // каждые 6 часов — меню-бар агент живёт днями без перезапуска.
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
-            self?.autoCheckUpdates()
+            self?.scheduledUpdateCheck()
+        }
+        updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.scheduledUpdateCheck() }
         }
 
         // Тестовый флаг: сразу открыть Launchpad.
@@ -137,6 +143,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                 action: #selector(checkUpdatesClicked), keyEquivalent: "")
         updateMenuItem = update
         menu.addItem(update)
+        let autoUpdate = NSMenuItem(title: "Обновлять автоматически",
+                                    action: #selector(toggleAutoUpdate), keyEquivalent: "")
+        autoUpdate.state = AppSettings.shared.autoUpdate ? .on : .off
+        autoUpdateMenuItem = autoUpdate
+        menu.addItem(autoUpdate)
         menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "Выход", action: #selector(quit), keyEquivalent: "q")
         for item in menu.items { item.target = self }
@@ -394,13 +405,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func autoCheckUpdates() {
+    /// Фоновая проверка: при запуске и по таймеру. Если включено «Обновлять
+    /// автоматически» и оверлей скрыт — тихо ставит обновление (перезапуск
+    /// меню-бар агента незаметен). Иначе только помечает в меню.
+    private func scheduledUpdateCheck() {
         Updater.checkForUpdate { [weak self] update in
             MainActor.assumeIsolated {
-                guard let update else { return }
-                self?.pendingUpdate = update
-                self?.updateMenuItem?.title = "Обновить до \(update.version)…"
+                guard let self, let update else { return }
+                self.pendingUpdate = update
+                self.updateMenuItem?.title = "Обновить до \(update.version)…"
+                if AppSettings.shared.autoUpdate && !self.window.isVisible {
+                    Updater.downloadAndInstall(update) { _ in }
+                }
             }
+        }
+    }
+
+    @objc private func toggleAutoUpdate() {
+        AppSettings.shared.autoUpdate.toggle()
+        autoUpdateMenuItem?.state = AppSettings.shared.autoUpdate ? .on : .off
+        // Только что включили и обновление уже найдено — поставить сразу (если скрыт).
+        if AppSettings.shared.autoUpdate, let update = pendingUpdate, !window.isVisible {
+            Updater.downloadAndInstall(update) { _ in }
         }
     }
 
@@ -427,5 +453,6 @@ extension AppDelegate: NSMenuDelegate {
         // Актуализируем галочки при открытии меню.
         loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
         keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
+        autoUpdateMenuItem?.state = AppSettings.shared.autoUpdate ? .on : .off
     }
 }

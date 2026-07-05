@@ -47,6 +47,7 @@ final class AppSettings: ObservableObject {
         static let columns = "grid.columns"
         static let rows = "grid.rows"
         static let hotkey = "hotkey.preset"
+        static let autoUpdate = "update.auto"
     }
 
     @Published var columns: Int {
@@ -58,6 +59,10 @@ final class AppSettings: ObservableObject {
     @Published var hotkey: HotkeyPreset {
         didSet { UserDefaults.standard.set(hotkey.rawValue, forKey: Keys.hotkey) }
     }
+    /// Автоматически скачивать и ставить обновления (по умолчанию включено).
+    @Published var autoUpdate: Bool {
+        didSet { UserDefaults.standard.set(autoUpdate, forKey: Keys.autoUpdate) }
+    }
 
     private init() {
         let d = UserDefaults.standard
@@ -66,6 +71,8 @@ final class AppSettings: ObservableObject {
         columns = c == 0 ? 7 : max(4, min(c, 10))
         rows = r == 0 ? 5 : max(3, min(r, 8))
         hotkey = HotkeyPreset(rawValue: d.string(forKey: Keys.hotkey) ?? "") ?? .f4
+        // Нет сохранённого значения → по умолчанию true.
+        autoUpdate = d.object(forKey: Keys.autoUpdate) == nil ? true : d.bool(forKey: Keys.autoUpdate)
     }
 
     private func persist(_ value: Int, forKey key: String) {
