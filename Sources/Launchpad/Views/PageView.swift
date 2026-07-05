@@ -133,6 +133,7 @@ struct PageView: View {
                     .padding(.bottom, 24)
             )
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFolderTarget)
+            .overlay(alignment: .topLeading) { deleteBadge(item) }
             .contentShape(Rectangle())
             .onTapGesture { activate(item) }
             .highPriorityGesture(
@@ -160,6 +161,25 @@ struct PageView: View {
         switch item {
         case .app(let app):       AppIconView(app: app)
         case .folder(let folder): FolderIconView(folder: folder)
+        }
+    }
+
+    /// Крестик удаления в углу иконки (виден при зажатом ⌥, как в оригинале).
+    @ViewBuilder
+    private func deleteBadge(_ item: LaunchpadItem) -> some View {
+        if drag == nil, model.optionHeld, case .app(let app) = item, model.canDelete(app) {
+            Button {
+                model.pendingDelete = app
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 22))
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.55))
+                    .background(Circle().fill(.white.opacity(0.001)))
+            }
+            .buttonStyle(.plain)
+            .offset(x: 12, y: -2)
+            .transition(.scale.combined(with: .opacity))
         }
     }
 

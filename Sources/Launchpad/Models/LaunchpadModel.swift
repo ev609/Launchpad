@@ -12,6 +12,8 @@ final class LaunchpadModel: ObservableObject {
     @Published var openFolderID: String?
     /// Приложение, для которого запрошено удаление (показывается подтверждение).
     @Published var pendingDelete: AppEntry?
+    /// Зажата ли клавиша ⌥ — показывать крестики удаления (как в оригинале).
+    @Published var optionHeld: Bool = false
 
     private(set) var allApps: [AppEntry] = []
 

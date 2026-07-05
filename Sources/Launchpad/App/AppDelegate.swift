@@ -29,10 +29,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Распознавание щипка трекпадом (открытие Launchpad жестом).
     private let multitouch = MultitouchManager()
 
+    /// Distributed-уведомление «показать Launchpad» (посылается вторым экземпляром).
+    static let showNotification = Notification.Name("com.openlaunchpad.show")
+
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Single-instance guard: если уже запущена копия — тихо выходим,
-        // иначе login item + LaunchAgent дадут два процесса.
+        // Single-instance guard: если уже запущена копия — просим её показать
+        // Launchpad (клик по иконке приложения открывает ланч) и выходим.
         if isDuplicateInstance() {
+            DistributedNotificationCenter.default().postNotificationName(
+                Self.showNotification, object: nil, userInfo: nil, deliverImmediately: true)
             NSApp.terminate(nil)
             return
         }
@@ -59,6 +64,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.show()
             }
         }
+    }
+
+    /// Клик по иконке уже запущенного приложения (Finder/Dock/Launchpad) → открываем ланч.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        show()
+        return true
     }
 
     // MARK: - Построение UI
@@ -146,6 +157,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.registerHotKeys()
             }
         }
+        // Второй экземпляр (клик по иконке приложения) просит показать Launchpad.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Self.showNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.show() }
+        }
         // Смена рабочего стола — закрываем Launchpad (как в оригинале),
         // чтобы он не висел на всех пространствах.
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -190,7 +206,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func installMonitors() {
         guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .scrollWheel]) { [weak self] event in
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .scrollWheel, .flagsChanged]) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
         }
@@ -200,6 +216,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
         keyMonitor = nil
         scrollAccumulator = 0
+        model.optionHeld = false
     }
 
     private func handle(_ event: NSEvent) -> NSEvent? {
@@ -208,6 +225,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return handleKey(event)
         case .scrollWheel:
             handleScroll(event)
+            return event
+        case .flagsChanged:
+            // Зажатие ⌥ показывает крестики удаления (как в оригинале Launchpad).
+            model.optionHeld = event.modifierFlags.contains(.option)
             return event
         default:
             return event
