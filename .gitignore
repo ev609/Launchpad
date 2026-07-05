@@ -1,0 +1,16 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# Собранный бандл приложения
+build/
+
+# macOS
+.DS_Store
+
+# Временные файлы
+*.png
+!Resources/*.png
+!docs/*.png
+scratchpad_*
