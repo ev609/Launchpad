@@ -142,15 +142,11 @@ final class MultitouchManager {
                          count, radius, speedSum, coherence))
         }
 
-        // ВЕТО: пальцы заметно движутся в одну сторону → это свайп смены
-        // рабочих столов, а не щипок. Не срабатываем.
-        if speedSum > 0.8 && coherence > 0.6 {
-            resetGesture()
-            return
-        }
+        _ = coherence // оставлено только для лога: у этого трекпада coherence
+                      // высокая и у щипка (0.55–0.75), поэтому для решения НЕ годится.
 
-        // Начало жеста — запоминаем точку старта.
-        guard let start = startCentroid, minRadius != nil, maxRadius != nil else {
+        // Отслеживаем экстремумы радиуса за жест.
+        guard minRadius != nil, maxRadius != nil else {
             startCentroid = (cx, cy)
             minRadius = radius
             maxRadius = radius
@@ -162,17 +158,17 @@ final class MultitouchManager {
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastFire > 1.0 else { return }
 
-        // Смещение центра от старта жеста и изменение радиуса.
-        let centroidDisp = ((cx - start.x) * (cx - start.x) + (cy - start.y) * (cy - start.y)).squareRoot()
         let shrink = maxRadius! - radius   // сведение (открыть)
         let grow = radius - minRadius!     // разведение (закрыть)
 
-        // Щипок: изменение радиуса доминирует над смещением центра (иначе это свайп).
-        if shrink > 0.06, shrink > centroidDisp * 1.2, radius < 0.24 {
+        // Надёжный признак (по реальным данным трекпада): щипок сводит пальцы
+        // к центру (radius < 0.22 при сжатии > 0.10). Свайп смены столов держит
+        // пальцы разведёнными (radius остаётся ~0.30) → сюда не попадает.
+        if shrink > 0.10, radius < 0.22 {
             lastFire = now
             resetGesture()
             DispatchQueue.main.async { [weak self] in self?.onPinchIn?() }
-        } else if grow > 0.06, grow > centroidDisp * 1.2 {
+        } else if grow > 0.10, radius > 0.26 {
             lastFire = now
             resetGesture()
             DispatchQueue.main.async { [weak self] in self?.onPinchOut?() }
