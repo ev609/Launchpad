@@ -21,6 +21,17 @@ MainActor.assumeIsolated {
         print("после unregister: \(LoginItem.isEnabled)")
         exit(0)
     }
+    if CommandLine.arguments.contains("--mt-log") {
+        let mt = MultitouchManager()
+        mt.logging = true
+        mt.start()
+        print("Устройств: \(mt.deviceCount). Сделайте щипок на трекпаде (10 сек)…")
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+        exit(0)
+    }
     if CommandLine.arguments.contains("--mt-test") {
         let mt = MultitouchManager()
         mt.start()

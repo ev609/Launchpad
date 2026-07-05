@@ -66,8 +66,11 @@ final class MultitouchManager {
     // Состояние распознавания (доступ только из callback-потока).
     private var minRadius: Float?
     private var maxRadius: Float?
-    private var prevCentroid: (x: Float, y: Float)?
+    private var startCentroid: (x: Float, y: Float)?
     private var lastFire: Double = 0
+
+    /// Диагностика: печать кадров касаний (для калибровки порогов).
+    var logging = false
 
     init() {
         MultitouchManager.shared = self
@@ -98,16 +101,14 @@ final class MultitouchManager {
         }
     }
 
-    /// Обрабатывает кадр касаний. Щипок — это сведение/разведение 4–5 пальцев
-    /// БЕЗ движения центра. Свайп смены рабочих столов отсекается по движению центроида.
+    /// Обрабатывает кадр касаний. Щипок отличается от свайпа смены пространств
+    /// по СООТНОШЕНИЮ: у щипка радиус разброса меняется сильно, а центр стоит;
+    /// у свайпа наоборот — центр едет, радиус почти постоянен.
     func handle(touches: UnsafeMutablePointer<MTTouch>?, count: Int) {
         if count > maxTouchesSeen { maxTouchesSeen = count }
-        // Открытие Launchpad — жест «большой + 3 пальца» (4–5 касаний).
-        // 3-пальцевый свайп смены пространств сюда не попадает.
-        guard let touches, count >= 4, count <= 5 else {
-            minRadius = nil
-            maxRadius = nil
-            prevCentroid = nil
+        // Жест открытия — 3–5 пальцев. Свайпы отсекаются по соотношению ниже.
+        guard let touches, count >= 3, count <= 5 else {
+            resetGesture()
             return
         }
         let buf = UnsafeBufferPointer(start: touches, count: count)
@@ -116,20 +117,6 @@ final class MultitouchManager {
         var cx: Float = 0, cy: Float = 0
         for t in buf { cx += t.normalized.pos.x; cy += t.normalized.pos.y }
         cx /= Float(count); cy /= Float(count)
-
-        // Если центр заметно поехал — это свайп (перелистывание пространств),
-        // а не щипок. Сбрасываем накопление.
-        if let pc = prevCentroid {
-            let move = ((cx - pc.x) * (cx - pc.x) + (cy - pc.y) * (cy - pc.y)).squareRoot()
-            prevCentroid = (cx, cy)
-            if move > 0.012 {
-                minRadius = nil
-                maxRadius = nil
-                return
-            }
-        } else {
-            prevCentroid = (cx, cy)
-        }
 
         // Средний радиус разброса пальцев.
         var radius: Float = 0
@@ -140,25 +127,43 @@ final class MultitouchManager {
         }
         radius /= Float(count)
 
-        // Обновляем экстремумы за текущий жест.
-        minRadius = min(minRadius ?? radius, radius)
-        maxRadius = max(maxRadius ?? radius, radius)
-        guard let lo = minRadius, let hi = maxRadius else { return }
+        if logging {
+            print(String(format: "fingers=%d centroid=(%.3f,%.3f) radius=%.3f", count, cx, cy, radius))
+        }
+
+        // Начало жеста — запоминаем точку старта.
+        guard let start = startCentroid, minRadius != nil, maxRadius != nil else {
+            startCentroid = (cx, cy)
+            minRadius = radius
+            maxRadius = radius
+            return
+        }
+        minRadius = min(minRadius!, radius)
+        maxRadius = max(maxRadius!, radius)
 
         let now = ProcessInfo.processInfo.systemUptime
         guard now - lastFire > 1.0 else { return }
 
-        // Сведение к центру → щипок внутрь (открыть).
-        if hi - radius > 0.10 && radius < 0.20 {
+        // Смещение центра от старта жеста и изменение радиуса.
+        let centroidDisp = ((cx - start.x) * (cx - start.x) + (cy - start.y) * (cy - start.y)).squareRoot()
+        let shrink = maxRadius! - radius   // сведение (открыть)
+        let grow = radius - minRadius!     // разведение (закрыть)
+
+        // Щипок: изменение радиуса доминирует над смещением центра (иначе это свайп).
+        if shrink > 0.06, shrink > centroidDisp * 1.2, radius < 0.24 {
             lastFire = now
-            minRadius = nil; maxRadius = nil
+            resetGesture()
             DispatchQueue.main.async { [weak self] in self?.onPinchIn?() }
-        }
-        // Разведение от центра → щипок наружу (закрыть).
-        else if radius - lo > 0.10 {
+        } else if grow > 0.06, grow > centroidDisp * 1.2 {
             lastFire = now
-            minRadius = nil; maxRadius = nil
+            resetGesture()
             DispatchQueue.main.async { [weak self] in self?.onPinchOut?() }
         }
+    }
+
+    private func resetGesture() {
+        startCentroid = nil
+        minRadius = nil
+        maxRadius = nil
     }
 }
