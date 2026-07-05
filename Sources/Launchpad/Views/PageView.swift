@@ -56,6 +56,13 @@ struct PageView: View {
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    // Клик по пустому месту между иконками закрывает Launchpad.
+                    if drag == nil && model.openFolderID == nil {
+                        NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
+                    }
+                }
             ForEach(Array(layout.enumerated()), id: \.element.item.id) { _, placed in
                 cell(placed.item)
                     .frame(width: metrics.cellW, height: metrics.cellH)

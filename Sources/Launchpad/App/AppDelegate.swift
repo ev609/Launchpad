@@ -21,7 +21,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     // Мониторы событий (активны только при открытом окне).
     private var keyMonitor: Any?
     private var scrollAccumulator: CGFloat = 0
+    private var scrollHandled = false
     private var scrollCooldown = false
+
+    // Глобальный монитор щипка (открытие Launchpad жестом).
+    private var magnifyMonitor: Any?
+    private var magnifyAccum: CGFloat = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         model.load()
@@ -29,6 +34,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusItem()
         registerHotKeys()
         observeNotifications()
+        installMagnifyMonitor()
 
         // Тестовый флаг: сразу открыть Launchpad.
         if CommandLine.arguments.contains("--open") {
@@ -197,17 +203,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func handleScroll(_ event: NSEvent) {
         guard !model.isSearching, model.openFolderID == nil else { return }
-        // Горизонтальный скролл двумя пальцами листает страницы.
-        let dx = event.scrollingDeltaX
-        guard abs(dx) > abs(event.scrollingDeltaY) else { return }
-        scrollAccumulator += dx
-        guard !scrollCooldown, abs(scrollAccumulator) > 50 else { return }
 
-        if scrollAccumulator < 0 { model.nextPage() } else { model.prevPage() }
-        scrollAccumulator = 0
-        scrollCooldown = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
-            self?.scrollCooldown = false
+        if event.hasPreciseScrollingDeltas {
+            // Трекпад: листаем ровно один раз за физический свайп, инерцию игнорируем.
+            if event.momentumPhase != [] { return }
+            if event.phase == .began {
+                scrollAccumulator = 0
+                scrollHandled = false
+            }
+            scrollAccumulator += event.scrollingDeltaX
+            if !scrollHandled,
+               abs(scrollAccumulator) > 40,
+               abs(scrollAccumulator) > abs(event.scrollingDeltaY) {
+                if scrollAccumulator < 0 { model.nextPage() } else { model.prevPage() }
+                scrollHandled = true
+            }
+            if event.phase == .ended || event.phase == .cancelled {
+                scrollAccumulator = 0
+                scrollHandled = false
+            }
+        } else {
+            // Обычная мышь: дискретные щелчки с небольшим кулдауном.
+            guard abs(event.scrollingDeltaX) > abs(event.scrollingDeltaY) else { return }
+            guard !scrollCooldown else { return }
+            if event.scrollingDeltaX < 0 { model.nextPage() } else { model.prevPage() }
+            scrollCooldown = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                self?.scrollCooldown = false
+            }
+        }
+    }
+
+    // MARK: - Открытие щипком (глобальный жест magnify)
+
+    private func installMagnifyMonitor() {
+        magnifyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .magnify) { [weak self] event in
+            MainActor.assumeIsolated { self?.handleGlobalMagnify(event) }
+        }
+    }
+
+    private func handleGlobalMagnify(_ event: NSEvent) {
+        guard !window.isVisible else { return } // уже открыт
+        if event.phase == .began { magnifyAccum = 0 }
+        magnifyAccum += event.magnification
+        // Заметный щипок «внутрь» открывает Launchpad.
+        if magnifyAccum < -0.3 {
+            magnifyAccum = 0
+            show()
+        }
+        if event.phase == .ended || event.phase == .cancelled {
+            magnifyAccum = 0
         }
     }
 
