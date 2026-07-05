@@ -169,27 +169,35 @@ struct LaunchpadRootView: View {
         handleEdge(value.location, metrics)
 
         let others = model.pages[model.currentPage].items.filter { $0.id != d.itemID }
-        d.insertionIndex = metrics.slot(at: value.location, count: others.count)
 
-        // Ближайшая иконка по «сложенным» центрам (slot == индекс в others):
-        // именно там иконки и стоят, когда соседи замерли.
-        var nearestID: String?
-        var nearestDist = CGFloat.greatestFiniteMagnitude
-        for (j, item) in others.enumerated() {
-            let c = metrics.center(j)
-            let dist = hypot(value.location.x - c.x, value.location.y - c.y)
-            if dist < nearestDist { nearestDist = dist; nearestID = item.id }
-        }
-        let radius = min(metrics.cellW, metrics.cellH) * 0.34
+        // Ячейка сетки под курсором. Сетка привязана к экрану и не «уезжает»,
+        // поэтому решение стабильно (иконки анимируются внутри ячеек).
+        let p = value.location
+        let col = min(max(Int((p.x - metrics.sidePad) / metrics.cellW), 0), metrics.columns - 1)
+        let row = min(max(Int((p.y - metrics.topInset) / metrics.cellH), 0), metrics.rows - 1)
+        let cellIndex = row * metrics.columns + col
+        // Доля по горизонтали внутри ячейки: центральная треть → папка, края → перестановка.
+        let cellLeft = metrics.sidePad + CGFloat(col) * metrics.cellW
+        let fx = (p.x - cellLeft) / metrics.cellW
 
-        if let cand = nearestID, nearestDist < radius, canCombine(d.itemID, cand) {
-            // Над центром иконки → соседи замирают, цель для папки подсвечивается СРАЗУ.
-            d.reflow = false
-            d.folderTargetID = cand
+        if cellIndex < others.count {
+            let target = others[cellIndex]
+            if fx > 0.30, fx < 0.70, canCombine(d.itemID, target.id) {
+                // Центр ячейки → папка: соседи замирают, цель подсвечивается сразу.
+                d.folderTargetID = target.id
+                d.reflow = false
+                d.insertionIndex = cellIndex
+            } else {
+                // Край ячейки → перестановка: вставка до/после, соседи расступаются.
+                d.folderTargetID = nil
+                d.reflow = true
+                d.insertionIndex = fx <= 0.5 ? cellIndex : cellIndex + 1
+            }
         } else {
-            // В промежутке между иконками → обычная перестановка с расступанием.
-            d.reflow = true
+            // Пустая зона за последней иконкой → в конец.
             d.folderTargetID = nil
+            d.reflow = true
+            d.insertionIndex = others.count
         }
 
         drag = d

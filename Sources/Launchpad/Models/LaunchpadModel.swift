@@ -344,13 +344,12 @@ final class LaunchpadModel: ObservableObject {
     }
 
     /// Переносит элемент на страницу `p` в позицию `index` (жестовое перетаскивание).
+    /// `index` задаётся в пространстве «страница без перетаскиваемого элемента»
+    /// (others-space), поэтому после удаления элемента вставляем прямо по нему.
     func placeItem(_ sourceID: String, onPage p: Int, at index: Int) {
         guard let from = locate(sourceID), p >= 0, p < pages.count else { return }
         let item = pages[from.page].items.remove(at: from.index)
-        var idx = index
-        // Если элемент был на этой же странице до места вставки — индекс сдвигается.
-        if from.page == p && from.index < idx { idx -= 1 }
-        idx = max(0, min(idx, pages[p].items.count))
+        let idx = max(0, min(index, pages[p].items.count))
         pages[p].items.insert(item, at: idx)
         pages = normalize(pages)
         clampCurrentPage()
