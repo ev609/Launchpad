@@ -127,8 +127,26 @@ final class MultitouchManager {
         }
         radius /= Float(count)
 
+        // Когерентность скоростей: у свайпа все пальцы едут в одну сторону
+        // (векторы складываются, coherence→1), у щипка — гасятся (coherence→0).
+        var svx: Float = 0, svy: Float = 0, speedSum: Float = 0
+        for t in buf {
+            let vx = t.normalized.vel.x, vy = t.normalized.vel.y
+            svx += vx; svy += vy
+            speedSum += (vx * vx + vy * vy).squareRoot()
+        }
+        let coherence = speedSum > 1e-4 ? (svx * svx + svy * svy).squareRoot() / speedSum : 0
+
         if logging {
-            print(String(format: "fingers=%d centroid=(%.3f,%.3f) radius=%.3f", count, cx, cy, radius))
+            print(String(format: "fingers=%d radius=%.3f speed=%.2f coherence=%.2f",
+                         count, radius, speedSum, coherence))
+        }
+
+        // ВЕТО: пальцы заметно движутся в одну сторону → это свайп смены
+        // рабочих столов, а не щипок. Не срабатываем.
+        if speedSum > 0.8 && coherence > 0.6 {
+            resetGesture()
+            return
         }
 
         // Начало жеста — запоминаем точку старта.
