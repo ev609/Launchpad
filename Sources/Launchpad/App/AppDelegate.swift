@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusItem: NSStatusItem!
     private var loginItemMenuItem: NSMenuItem?
     private var keepAliveMenuItem: NSMenuItem?
+    private var updateMenuItem: NSMenuItem?
+    private var pendingUpdate: Updater.Update?
     private var hotKeys: [GlobalHotKey] = []
 
     // Мониторы событий (активны только при открытом окне).
@@ -57,6 +59,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.hide()
         }
         multitouch.start()
+
+        // Тихая проверка обновлений при запуске (через 4 с, не мешая старту).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in
+            self?.autoCheckUpdates()
+        }
 
         // Тестовый флаг: сразу открыть Launchpad.
         if CommandLine.arguments.contains("--open") {
@@ -125,6 +132,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         keepAliveMenuItem = keepAlive
         menu.addItem(keepAlive)
 
+        menu.addItem(.separator())
+        let update = NSMenuItem(title: "Проверить обновления…",
+                                action: #selector(checkUpdatesClicked), keyEquivalent: "")
+        updateMenuItem = update
+        menu.addItem(update)
         menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "Выход", action: #selector(quit), keyEquivalent: "q")
         for item in menu.items { item.target = self }
@@ -358,6 +370,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let me = NSRunningApplication.current
         return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
             .contains { $0.processIdentifier != me.processIdentifier }
+    }
+
+    // MARK: - Обновления
+
+    @objc private func checkUpdatesClicked() {
+        if let update = pendingUpdate {
+            promptInstall(update)
+            return
+        }
+        Updater.checkForUpdate { [weak self] update in
+            MainActor.assumeIsolated {
+                if let update {
+                    self?.pendingUpdate = update
+                    self?.promptInstall(update)
+                } else {
+                    let alert = NSAlert()
+                    alert.messageText = "Обновлений нет"
+                    alert.informativeText = "Установлена последняя версия \(Updater.currentVersion)."
+                    alert.runModal()
+                }
+            }
+        }
+    }
+
+    private func autoCheckUpdates() {
+        Updater.checkForUpdate { [weak self] update in
+            MainActor.assumeIsolated {
+                guard let update else { return }
+                self?.pendingUpdate = update
+                self?.updateMenuItem?.title = "Обновить до \(update.version)…"
+            }
+        }
+    }
+
+    private func promptInstall(_ update: Updater.Update) {
+        let alert = NSAlert()
+        alert.messageText = "Доступно обновление \(update.version)"
+        alert.informativeText = update.notes.isEmpty
+            ? "Установить сейчас? Launchpad перезапустится."
+            : update.notes
+        alert.addButton(withTitle: "Обновить")
+        alert.addButton(withTitle: "Позже")
+        if alert.runModal() == .alertFirstButtonReturn {
+            Updater.downloadAndInstall(update) { _ in }
+        }
     }
 
     @objc private func quit() {
