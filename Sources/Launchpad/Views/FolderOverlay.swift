@@ -34,8 +34,16 @@ struct FolderOverlay: View {
                         .font(.system(size: 22, weight: .medium))
                         .foregroundStyle(.white)
                         .focused($nameFocused)
-                        .frame(maxWidth: 300)
+                        .frame(maxWidth: 320)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 5)
+                        .background(
+                            // Подсказка, что имя можно редактировать.
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(.white.opacity(nameFocused ? 0.18 : 0.06))
+                        )
                         .onSubmit { commitName() }
+                        .help("Нажмите, чтобы переименовать папку")
 
                     grid(folder)
                 }

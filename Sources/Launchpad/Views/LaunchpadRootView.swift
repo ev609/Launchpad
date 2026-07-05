@@ -90,6 +90,19 @@ struct LaunchpadRootView: View {
                     DispatchQueue.main.async { searchFocused = true }
                 }
             }
+            .confirmationDialog(
+                model.pendingDelete.map { "Удалить «\($0.name)»?" } ?? "",
+                isPresented: Binding(get: { model.pendingDelete != nil },
+                                     set: { if !$0 { model.pendingDelete = nil } }),
+                presenting: model.pendingDelete
+            ) { app in
+                Button("Переместить в Корзину", role: .destructive) {
+                    model.deleteApp(app)
+                }
+                Button("Отмена", role: .cancel) {}
+            } message: { app in
+                Text("«\(app.name)» будет перемещено в Корзину.")
+            }
         }
     }
 

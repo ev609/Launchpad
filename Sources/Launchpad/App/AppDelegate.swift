@@ -70,7 +70,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                backing: .buffered,
                                defer: false)
         window.level = NSWindow.Level(rawValue: Int(CGShieldingWindowLevel()))
-        window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .stationary]
+        // БЕЗ .canJoinAllSpaces/.moveToActiveSpace — иначе окно висит на всех
+        // рабочих столах или следует за ними. Окно остаётся на том пространстве,
+        // где открыто; при смене стола закрывается (наблюдатель ниже).
+        window.collectionBehavior = [.fullScreenAuxiliary, .stationary]
         window.isOpaque = false
         window.backgroundColor = .clear
         window.hasShadow = false
@@ -141,6 +144,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated {
                 self?.model.applyGridChange()
                 self?.registerHotKeys()
+            }
+        }
+        // Смена рабочего стола — закрываем Launchpad (как в оригинале),
+        // чтобы он не висел на всех пространствах.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                if self?.window.isVisible == true { self?.hide() }
             }
         }
     }

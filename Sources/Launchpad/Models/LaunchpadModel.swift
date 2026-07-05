@@ -10,6 +10,8 @@ final class LaunchpadModel: ObservableObject {
     @Published var currentPage: Int = 0
     /// Открытая папка (по id) — показывается оверлеем.
     @Published var openFolderID: String?
+    /// Приложение, для которого запрошено удаление (показывается подтверждение).
+    @Published var pendingDelete: AppEntry?
 
     private(set) var allApps: [AppEntry] = []
 
@@ -345,6 +347,29 @@ final class LaunchpadModel: ObservableObject {
     /// Номер страницы, на которой находится элемент.
     func pageIndex(of itemID: String) -> Int? {
         locate(itemID)?.page
+    }
+
+    /// Можно ли удалить приложение (не системное, доступно на запись).
+    func canDelete(_ app: AppEntry) -> Bool {
+        !app.path.hasPrefix("/System/")
+    }
+
+    /// Перемещает приложение в Корзину и убирает его из раскладки.
+    @discardableResult
+    func deleteApp(_ app: AppEntry) -> Bool {
+        let url = URL(fileURLWithPath: app.path)
+        do {
+            try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        } catch {
+            NSLog("deleteApp: не удалось переместить в Корзину — \(error.localizedDescription)")
+            return false
+        }
+        removeAppEverywhere(app.id)
+        allApps.removeAll { $0.id == app.id }
+        pages = normalize(pages)
+        clampCurrentPage()
+        save()
+        return true
     }
 
     /// Удаляет приложение отовсюду (верхний уровень и из папок).

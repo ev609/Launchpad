@@ -146,6 +146,13 @@ struct PageView: View {
                     }
                     .onEnded { value in onDragEnd(value) }
             )
+            .contextMenu {
+                if case .app(let app) = item, model.canDelete(app) {
+                    Button("Удалить «\(app.name)»", role: .destructive) {
+                        model.pendingDelete = app
+                    }
+                }
+            }
     }
 
     @ViewBuilder
