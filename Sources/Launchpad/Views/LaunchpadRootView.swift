@@ -9,7 +9,7 @@ struct LaunchpadRootView: View {
     @State private var drag: DragState?
     // Кандидат в папку и момент начала наведения (для задержки).
     @State private var folderCandidateID: String?
-    @State private var folderCandidateSince: UInt64 = 0
+    @State private var folderDwellWork: DispatchWorkItem?
 
     var body: some View {
         GeometryReader { geo in
@@ -29,20 +29,23 @@ struct LaunchpadRootView: View {
                         }
                     }
 
-                if model.isSearching {
-                    VStack(spacing: 0) {
-                        searchField.padding(.top, safeTop + 16)
-                        SearchResultsView(model: model)
-                    }
-                } else {
+                // Сетка и подсказки краёв — отдельным слоем, только вне поиска.
+                if !model.isSearching {
                     pager(metrics)
-                    VStack(spacing: 0) {
-                        searchField.padding(.top, safeTop + 16)
+                    edgeHint(metrics, direction: -1)
+                    edgeHint(metrics, direction: 1)
+                }
+
+                // Поле поиска ВСЕГДА в одной и той же позиции иерархии —
+                // иначе при переключении режима TextField пересоздаётся и теряет фокус.
+                VStack(spacing: 0) {
+                    searchField.padding(.top, safeTop + 16)
+                    if model.isSearching {
+                        SearchResultsView(model: model)
+                    } else {
                         Spacer()
                         pageDots.padding(.bottom, 24)
                     }
-                    edgeHint(metrics, direction: -1)
-                    edgeHint(metrics, direction: 1)
                 }
 
                 // Летящая под курсором иконка.
@@ -170,36 +173,55 @@ struct LaunchpadRootView: View {
 
         let others = model.pages[model.currentPage].items.filter { $0.id != d.itemID }
         d.insertionIndex = metrics.slot(at: value.location, count: others.count)
-        d.folderTargetID = folderTarget(at: value.location, others: others, metrics: metrics, dragID: d.itemID)
+
+        // Ближайшая иконка по «сложенным» центрам (slot == индекс в others):
+        // именно там иконки и стоят, когда соседи замерли.
+        var nearestID: String?
+        var nearestDist = CGFloat.greatestFiniteMagnitude
+        for (j, item) in others.enumerated() {
+            let c = metrics.center(j)
+            let dist = hypot(value.location.x - c.x, value.location.y - c.y)
+            if dist < nearestDist { nearestDist = dist; nearestID = item.id }
+        }
+        let radius = min(metrics.cellW, metrics.cellH) * 0.30
+
+        if let cand = nearestID, nearestDist < radius, canCombine(d.itemID, cand) {
+            // Навели на иконку → соседи замирают, задержку копит таймер (не события).
+            d.reflow = false
+            if folderCandidateID != cand {
+                folderCandidateID = cand
+                d.folderTargetID = nil
+                scheduleFolderDwell(cand)
+            }
+            // Тот же кандидат — folderTargetID не трогаем: его выставит таймер.
+        } else {
+            // В промежутке между иконками → обычная перестановка с расступанием.
+            d.reflow = true
+            d.folderTargetID = nil
+            folderCandidateID = nil
+            cancelFolderDwell()
+        }
 
         drag = d
     }
 
-    /// Ищет иконку под курсором; при достаточной задержке возвращает её как цель для папки.
-    private func folderTarget(at point: CGPoint, others: [LaunchpadItem],
-                              metrics: GridMetrics, dragID: String) -> String? {
-        // Ближайшая иконка (по «естественным» слотам без дыры).
-        var nearest: (id: String, dist: CGFloat)?
-        for (i, item) in others.enumerated() {
-            let c = metrics.center(i)
-            let dist = hypot(point.x - c.x, point.y - c.y)
-            if nearest == nil || dist < nearest!.dist { nearest = (item.id, dist) }
+    /// По истечении задержки над иконкой фиксирует её как цель для папки.
+    private func scheduleFolderDwell(_ candidate: String) {
+        folderDwellWork?.cancel()
+        let work = DispatchWorkItem {
+            guard folderCandidateID == candidate,
+                  var dd = drag, dd.itemID != candidate else { return }
+            dd.folderTargetID = candidate
+            dd.reflow = false
+            drag = dd
         }
-        let threshold = min(metrics.cellW, metrics.cellH) * 0.32
-        guard let near = nearest, near.dist < threshold, canCombine(dragID, near.id) else {
-            folderCandidateID = nil
-            return nil
-        }
+        folderDwellWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
+    }
 
-        let now = DispatchTime.now().uptimeNanoseconds
-        if folderCandidateID != near.id {
-            folderCandidateID = near.id
-            folderCandidateSince = now
-            return nil
-        }
-        // Задержка ~0.45 c над иконкой → создаём папку.
-        let elapsed = Double(now - folderCandidateSince) / 1_000_000_000
-        return elapsed > 0.45 ? near.id : nil
+    private func cancelFolderDwell() {
+        folderDwellWork?.cancel()
+        folderDwellWork = nil
     }
 
     private func canCombine(_ dragID: String, _ targetID: String) -> Bool {
@@ -220,6 +242,8 @@ struct LaunchpadRootView: View {
 
     private func endDrag() {
         model.cancelEdgeHover()
+        cancelFolderDwell()
+        folderCandidateID = nil
         guard let d = drag else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             if let target = d.folderTargetID {

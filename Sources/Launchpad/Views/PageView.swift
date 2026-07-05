@@ -41,6 +41,7 @@ struct DragState {
     var location: CGPoint       // в координатах экрана ("root")
     var insertionIndex: Int
     var folderTargetID: String? // если задержались над иконкой — цель для папки
+    var reflow: Bool = true     // расступаться ли соседям (false при наведении на иконку)
 }
 
 /// Одна страница сетки. Иконки расставлены вручную по слотам, чтобы поддержать
@@ -92,7 +93,8 @@ struct PageView: View {
         }
 
         let isTargetPage = pageIndex == model.currentPage
-        let hole = (isTargetPage && d.folderTargetID == nil) ? d.insertionIndex : -1
+        // Дыра под вставку только когда соседи расступаются (не при наведении на иконку).
+        let hole = (isTargetPage && d.reflow) ? d.insertionIndex : -1
 
         var placed: [Placed] = []
         var slot = 0
