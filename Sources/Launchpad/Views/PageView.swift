@@ -117,11 +117,18 @@ struct PageView: View {
     private func cell(_ item: LaunchpadItem) -> some View {
         let isFolderTarget = drag?.folderTargetID == item.id
         content(item)
-            .scaleEffect(isFolderTarget ? 1.18 : 1.0)
+            .scaleEffect(isFolderTarget ? 1.22 : 1.0)
             .background(
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .fill(.white.opacity(isFolderTarget ? 0.15 : 0))
-                    .padding(6)
+                // Явный «поднос» под целью — сигнал, что образуется папка.
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.white.opacity(isFolderTarget ? 0.28 : 0))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 24, style: .continuous)
+                            .stroke(.white.opacity(isFolderTarget ? 0.55 : 0), lineWidth: 2)
+                    )
+                    .padding(.horizontal, 8)
+                    .padding(.top, 2)
+                    .padding(.bottom, 24)
             )
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFolderTarget)
             .contentShape(Rectangle())

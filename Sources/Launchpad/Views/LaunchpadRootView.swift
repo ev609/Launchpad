@@ -8,8 +8,6 @@ struct LaunchpadRootView: View {
     // Активное перетаскивание.
     @State private var drag: DragState?
     // Кандидат в папку и момент начала наведения (для задержки).
-    @State private var folderCandidateID: String?
-    @State private var folderDwellWork: DispatchWorkItem?
 
     var body: some View {
         GeometryReader { geo in
@@ -158,7 +156,6 @@ struct LaunchpadRootView: View {
                               insertionIndex: 0,
                               folderTargetID: nil)
         drag = state
-        folderCandidateID = nil
         updateDrag(value, metrics, initial: &state)
     }
 
@@ -183,45 +180,19 @@ struct LaunchpadRootView: View {
             let dist = hypot(value.location.x - c.x, value.location.y - c.y)
             if dist < nearestDist { nearestDist = dist; nearestID = item.id }
         }
-        let radius = min(metrics.cellW, metrics.cellH) * 0.30
+        let radius = min(metrics.cellW, metrics.cellH) * 0.34
 
         if let cand = nearestID, nearestDist < radius, canCombine(d.itemID, cand) {
-            // Навели на иконку → соседи замирают, задержку копит таймер (не события).
+            // Над центром иконки → соседи замирают, цель для папки подсвечивается СРАЗУ.
             d.reflow = false
-            if folderCandidateID != cand {
-                folderCandidateID = cand
-                d.folderTargetID = nil
-                scheduleFolderDwell(cand)
-            }
-            // Тот же кандидат — folderTargetID не трогаем: его выставит таймер.
+            d.folderTargetID = cand
         } else {
             // В промежутке между иконками → обычная перестановка с расступанием.
             d.reflow = true
             d.folderTargetID = nil
-            folderCandidateID = nil
-            cancelFolderDwell()
         }
 
         drag = d
-    }
-
-    /// По истечении задержки над иконкой фиксирует её как цель для папки.
-    private func scheduleFolderDwell(_ candidate: String) {
-        folderDwellWork?.cancel()
-        let work = DispatchWorkItem {
-            guard folderCandidateID == candidate,
-                  var dd = drag, dd.itemID != candidate else { return }
-            dd.folderTargetID = candidate
-            dd.reflow = false
-            drag = dd
-        }
-        folderDwellWork = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: work)
-    }
-
-    private func cancelFolderDwell() {
-        folderDwellWork?.cancel()
-        folderDwellWork = nil
     }
 
     private func canCombine(_ dragID: String, _ targetID: String) -> Bool {
@@ -242,8 +213,6 @@ struct LaunchpadRootView: View {
 
     private func endDrag() {
         model.cancelEdgeHover()
-        cancelFolderDwell()
-        folderCandidateID = nil
         guard let d = drag else { return }
         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
             if let target = d.folderTargetID {
@@ -253,7 +222,6 @@ struct LaunchpadRootView: View {
             }
         }
         drag = nil
-        folderCandidateID = nil
         model.pruneEmptyPages()
     }
 }
