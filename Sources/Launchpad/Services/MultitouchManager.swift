@@ -66,6 +66,7 @@ final class MultitouchManager {
     // Состояние распознавания (доступ только из callback-потока).
     private var minRadius: Float?
     private var maxRadius: Float?
+    private var prevCentroid: (x: Float, y: Float)?
     private var lastFire: Double = 0
 
     init() {
@@ -97,12 +98,16 @@ final class MultitouchManager {
         }
     }
 
-    /// Обрабатывает кадр касаний. Ищет сведение 3–5 пальцев к центру.
+    /// Обрабатывает кадр касаний. Щипок — это сведение/разведение 4–5 пальцев
+    /// БЕЗ движения центра. Свайп смены рабочих столов отсекается по движению центроида.
     func handle(touches: UnsafeMutablePointer<MTTouch>?, count: Int) {
         if count > maxTouchesSeen { maxTouchesSeen = count }
-        guard let touches, count >= 3, count <= 5 else {
+        // Открытие Launchpad — жест «большой + 3 пальца» (4–5 касаний).
+        // 3-пальцевый свайп смены пространств сюда не попадает.
+        guard let touches, count >= 4, count <= 5 else {
             minRadius = nil
             maxRadius = nil
+            prevCentroid = nil
             return
         }
         let buf = UnsafeBufferPointer(start: touches, count: count)
@@ -111,6 +116,20 @@ final class MultitouchManager {
         var cx: Float = 0, cy: Float = 0
         for t in buf { cx += t.normalized.pos.x; cy += t.normalized.pos.y }
         cx /= Float(count); cy /= Float(count)
+
+        // Если центр заметно поехал — это свайп (перелистывание пространств),
+        // а не щипок. Сбрасываем накопление.
+        if let pc = prevCentroid {
+            let move = ((cx - pc.x) * (cx - pc.x) + (cy - pc.y) * (cy - pc.y)).squareRoot()
+            prevCentroid = (cx, cy)
+            if move > 0.012 {
+                minRadius = nil
+                maxRadius = nil
+                return
+            }
+        } else {
+            prevCentroid = (cx, cy)
+        }
 
         // Средний радиус разброса пальцев.
         var radius: Float = 0
@@ -130,13 +149,13 @@ final class MultitouchManager {
         guard now - lastFire > 1.0 else { return }
 
         // Сведение к центру → щипок внутрь (открыть).
-        if hi - radius > 0.08 && radius < 0.22 {
+        if hi - radius > 0.10 && radius < 0.20 {
             lastFire = now
             minRadius = nil; maxRadius = nil
             DispatchQueue.main.async { [weak self] in self?.onPinchIn?() }
         }
         // Разведение от центра → щипок наружу (закрыть).
-        else if radius - lo > 0.08 {
+        else if radius - lo > 0.10 {
             lastFire = now
             minRadius = nil; maxRadius = nil
             DispatchQueue.main.async { [weak self] in self?.onPinchOut?() }

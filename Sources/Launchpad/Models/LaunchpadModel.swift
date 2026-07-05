@@ -252,6 +252,35 @@ final class LaunchpadModel: ObservableObject {
         save()
     }
 
+    /// Извлекает приложение из папки и кладёт его на страницу рядом с папкой.
+    func extractApp(_ appID: String, fromFolder folderID: String) {
+        guard let loc = locate("folder:" + folderID),
+              case .folder(var folder) = pages[loc.page].items[loc.index],
+              let app = folder.apps.first(where: { $0.id == appID }) else { return }
+
+        folder.apps.removeAll { $0.id == appID }
+
+        if folder.apps.count <= 1 {
+            // Папка вырождается: заменяем её оставшимся приложением (или убираем).
+            if let only = folder.apps.first {
+                pages[loc.page].items[loc.index] = .app(only)
+            } else {
+                pages[loc.page].items.remove(at: loc.index)
+            }
+        } else {
+            pages[loc.page].items[loc.index] = .folder(folder)
+        }
+
+        // Вставляем извлечённое приложение сразу после папки.
+        let insertAt = min(loc.index + 1, pages[loc.page].items.count)
+        pages[loc.page].items.insert(.app(app), at: insertAt)
+
+        openFolderID = nil
+        pages = normalize(pages)
+        clampCurrentPage()
+        save()
+    }
+
     func renameFolder(_ folderID: String, to name: String) {
         guard let loc = locate("folder:" + folderID),
               case .folder(var folder) = pages[loc.page].items[loc.index] else { return }
