@@ -14,6 +14,11 @@ final class LaunchpadModel: ObservableObject {
     @Published var pendingDelete: AppEntry?
     /// Зажата ли клавиша ⌥ — показывать крестики удаления (как в оригинале).
     @Published var optionHeld: Bool = false
+    /// Режим редактирования (после долгого нажатия): иконки покачиваются, видны крестики.
+    @Published var editing: Bool = false
+
+    /// Показывать ли крестики удаления.
+    var showDeleteBadges: Bool { editing || optionHeld }
 
     private(set) var allApps: [AppEntry] = []
 

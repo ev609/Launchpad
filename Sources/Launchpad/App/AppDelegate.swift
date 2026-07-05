@@ -196,6 +196,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         removeMonitors()
         model.searchText = ""
         model.openFolderID = nil
+        model.editing = false
     }
 
     func toggle() {
@@ -238,7 +239,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func handleKey(_ event: NSEvent) -> NSEvent? {
         switch Int(event.keyCode) {
         case kVK_Escape:
-            if model.isSearching {
+            if model.editing {
+                model.editing = false          // сначала выходим из режима покачивания
+            } else if model.isSearching {
                 model.searchText = ""
             } else if model.openFolderID != nil {
                 model.openFolderID = nil

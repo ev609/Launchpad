@@ -59,15 +59,22 @@ struct PageView: View {
     let onDragChange: (DragGesture.Value) -> Void
     let onDragEnd: (DragGesture.Value) -> Void
 
+    @State private var wiggle = false
+
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
                 .contentShape(Rectangle())
                 .onTapGesture {
-                    // Клик по пустому месту между иконками закрывает Launchpad.
-                    if drag == nil && model.openFolderID == nil {
+                    guard drag == nil, model.openFolderID == nil else { return }
+                    if model.editing {
+                        model.editing = false          // выход из режима покачивания
+                    } else {
                         NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
                     }
+                }
+                .onChange(of: model.showDeleteBadges) { on in
+                    if on { wiggle = true } else { wiggle = false }
                 }
             ForEach(Array(layout.enumerated()), id: \.element.item.id) { _, placed in
                 cell(placed.item)
@@ -118,6 +125,7 @@ struct PageView: View {
     @ViewBuilder
     private func cell(_ item: LaunchpadItem) -> some View {
         let isFolderTarget = drag?.folderTargetID == item.id
+        let wiggling = model.showDeleteBadges && drag == nil
         content(item)
             .scaleEffect(isFolderTarget ? 1.22 : 1.0)
             .background(
@@ -133,9 +141,19 @@ struct PageView: View {
                     .padding(.bottom, 24)
             )
             .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFolderTarget)
-            .overlay(alignment: .topLeading) { deleteBadge(item) }
+            // Покачивание в режиме редактирования (как в оригинале).
+            .rotationEffect(.degrees(wiggling ? (wiggle ? 1.6 : -1.6) : 0))
+            .animation(wiggling ? .easeInOut(duration: wiggleDuration(item)).repeatForever(autoreverses: true)
+                                : .easeOut(duration: 0.12),
+                       value: wiggle)
             .contentShape(Rectangle())
             .onTapGesture { activate(item) }
+            // Долгое нажатие → режим редактирования. simultaneousGesture, чтобы
+            // работать параллельно с драгом (иначе highPriority-драг его глушит).
+            .simultaneousGesture(
+                LongPressGesture(minimumDuration: 0.5)
+                    .onEnded { _ in if case .app = item { model.editing = true } }
+            )
             .highPriorityGesture(
                 DragGesture(minimumDistance: 5, coordinateSpace: .named("root"))
                     .onChanged { value in
@@ -156,30 +174,20 @@ struct PageView: View {
             }
     }
 
+    /// Небольшой разброс периода покачивания, чтобы иконки не качались синхронно.
+    private func wiggleDuration(_ item: LaunchpadItem) -> Double {
+        0.12 + Double(abs(item.id.hashValue) % 5) * 0.012
+    }
+
     @ViewBuilder
     private func content(_ item: LaunchpadItem) -> some View {
         switch item {
-        case .app(let app):       AppIconView(app: app)
-        case .folder(let folder): FolderIconView(folder: folder)
-        }
-    }
-
-    /// Крестик удаления в углу иконки (виден при зажатом ⌥, как в оригинале).
-    @ViewBuilder
-    private func deleteBadge(_ item: LaunchpadItem) -> some View {
-        if drag == nil, model.optionHeld, case .app(let app) = item, model.canDelete(app) {
-            Button {
-                model.pendingDelete = app
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 22))
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(.white, .black.opacity(0.55))
-                    .background(Circle().fill(.white.opacity(0.001)))
-            }
-            .buttonStyle(.plain)
-            .offset(x: 12, y: -2)
-            .transition(.scale.combined(with: .opacity))
+        case .app(let app):
+            AppIconView(app: app,
+                        showDelete: drag == nil && model.showDeleteBadges && model.canDelete(app),
+                        onDelete: { model.pendingDelete = app })
+        case .folder(let folder):
+            FolderIconView(folder: folder)
         }
     }
 

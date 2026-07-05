@@ -23,7 +23,9 @@ struct LaunchpadRootView: View {
                     .ignoresSafeArea()
                     .onTapGesture {
                         if model.openFolderID != nil { return }
-                        if model.isSearching {
+                        if model.editing {
+                            model.editing = false      // выход из режима покачивания
+                        } else if model.isSearching {
                             model.searchText = ""      // клик вне результатов сбрасывает поиск
                         } else {
                             NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)

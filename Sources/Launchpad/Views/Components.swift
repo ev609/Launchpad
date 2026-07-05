@@ -24,6 +24,9 @@ struct VisualEffectView: NSViewRepresentable {
 struct AppIconView: View {
     let app: AppEntry
     var iconSize: CGFloat = 88
+    /// Показывать крестик удаления (в режиме редактирования).
+    var showDelete: Bool = false
+    var onDelete: () -> Void = {}
 
     var body: some View {
         VStack(spacing: 6) {
@@ -31,6 +34,19 @@ struct AppIconView: View {
                 .resizable()
                 .interpolation(.high)
                 .frame(width: iconSize, height: iconSize)
+                .overlay(alignment: .topLeading) {
+                    if showDelete {
+                        Button(action: onDelete) {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: iconSize * 0.26))
+                                .symbolRenderingMode(.palette)
+                                .foregroundStyle(.white, .black.opacity(0.65))
+                        }
+                        .buttonStyle(.plain)
+                        // Крестик сидит точно на верхнем-левом углу иконки.
+                        .offset(x: -iconSize * 0.09, y: -iconSize * 0.09)
+                    }
+                }
             Text(app.name)
                 .font(.system(size: 12))
                 .foregroundStyle(.white)
