@@ -117,6 +117,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
+        // Неактивная строка-заголовок с версией.
+        let versionItem = NSMenuItem(title: "Launchpad \(Updater.currentVersion)",
+                                     action: nil, keyEquivalent: "")
+        versionItem.isEnabled = false
+        menu.addItem(versionItem)
+        menu.addItem(.separator())
         menu.addItem(withTitle: "Открыть Launchpad", action: #selector(showLaunchpad), keyEquivalent: "")
         menu.addItem(.separator())
         menu.addItem(withTitle: "Импортировать раскладку старого Launchpad",
