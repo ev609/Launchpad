@@ -130,3 +130,35 @@ struct CellDropDelegate: DropDelegate {
     private func isFolder(_ id: String) -> Bool { id.hasPrefix("folder:") }
     private func isApp(_ id: String) -> Bool { id.hasPrefix("app:") }
 }
+
+/// Зона у края экрана: при наведении перетаскиваемого элемента листает страницы,
+/// при сбросе — переносит элемент на соседнюю страницу.
+struct EdgeDropDelegate: DropDelegate {
+    let direction: Int   // -1 предыдущая, +1 следующая
+    let model: LaunchpadModel
+    @Binding var draggingID: String?
+    @Binding var isActive: Bool
+
+    func dropEntered(info: DropInfo) {
+        guard draggingID != nil else { return }
+        isActive = true
+        model.beginEdgeHover(direction)
+    }
+
+    func dropExited(info: DropInfo) {
+        isActive = false
+        model.cancelEdgeHover()
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        defer { isActive = false; draggingID = nil }
+        model.cancelEdgeHover()
+        guard let source = draggingID else { return false }
+        model.moveItem(source, toPage: model.currentPage + direction)
+        return true
+    }
+}

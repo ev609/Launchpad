@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private let model = LaunchpadModel()
     private var window: KeyableWindow!
+    private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem!
     private var hotKeys: [GlobalHotKey] = []
 
@@ -67,20 +68,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Обновить список приложений",
                      action: #selector(rescan), keyEquivalent: "")
         menu.addItem(.separator())
+        menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "Выход", action: #selector(quit), keyEquivalent: "q")
         for item in menu.items { item.target = self }
         statusItem.menu = menu
     }
 
     private func registerHotKeys() {
-        // F4 — классическая клавиша Launchpad.
-        if let hk = GlobalHotKey(keyCode: UInt32(kVK_F4), modifiers: 0, id: 1,
-                                 callback: { [weak self] in self?.toggle() }) {
-            hotKeys.append(hk)
-        }
-        // ⌥⌘Space — запасная комбинация.
-        let optCmd = UInt32(optionKey | cmdKey)
-        if let hk = GlobalHotKey(keyCode: UInt32(kVK_Space), modifiers: optCmd, id: 2,
+        hotKeys.removeAll() // deinit снимает старую регистрацию
+        let preset = AppSettings.shared.hotkey
+        guard let code = preset.keyCode else { return }
+        if let hk = GlobalHotKey(keyCode: code, modifiers: preset.modifiers, id: 1,
                                  callback: { [weak self] in self?.toggle() }) {
             hotKeys.append(hk)
         }
@@ -94,6 +92,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NotificationCenter.default.addObserver(
             forName: .launchpadToggle, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.toggle() }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .launchpadSettingsChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                self?.model.applyGridChange()
+                self?.registerHotKeys()
+            }
         }
     }
 
@@ -224,6 +229,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func rescan() {
         model.load()
+    }
+
+    @objc private func openSettings() {
+        if settingsWindow == nil {
+            let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 460),
+                             styleMask: [.titled, .closable],
+                             backing: .buffered, defer: false)
+            w.title = "Настройки Launchpad"
+            w.isReleasedWhenClosed = false
+            w.center()
+            w.contentView = NSHostingView(rootView: SettingsView(model: model))
+            settingsWindow = w
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        settingsWindow?.makeKeyAndOrderFront(nil)
+        settingsWindow?.level = .floating
     }
 
     @objc private func quit() {

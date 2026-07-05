@@ -13,10 +13,20 @@ final class LaunchpadModel: ObservableObject {
 
     private(set) var allApps: [AppEntry] = []
 
-    // Конфигурация сетки.
-    let columns = 7
-    let rows = 5
+    // Конфигурация сетки (из пользовательских настроек).
+    var columns: Int { AppSettings.shared.columns }
+    var rows: Int { AppSettings.shared.rows }
     var itemsPerPage: Int { columns * rows }
+
+    /// Пересобирает страницы под новый размер сетки.
+    func applyGridChange() {
+        pages = normalize(pages)
+        clampCurrentPage()
+        save()
+    }
+
+    // Перелистывание страниц во время перетаскивания.
+    private var edgeHoverWork: DispatchWorkItem?
 
     // MARK: - Загрузка
 
@@ -272,4 +282,68 @@ final class LaunchpadModel: ObservableObject {
 
     func nextPage() { goToPage(currentPage + 1) }
     func prevPage() { goToPage(currentPage - 1) }
+
+    // MARK: - Перенос между страницами
+
+    /// Переносит элемент в конец указанной страницы. Если индекс за пределами —
+    /// создаёт новую страницу.
+    func moveItem(_ sourceID: String, toPage index: Int) {
+        guard index >= 0, let from = locate(sourceID) else { return }
+        let item = pages[from.page].items.remove(at: from.index)
+        var target = index
+        if target >= pages.count {
+            pages.append(Page(items: []))
+            target = pages.count - 1
+        }
+        pages[target].items.append(item)
+        pages = normalize(pages)
+        clampCurrentPage()
+        save()
+    }
+
+    /// Листает страницы во время перетаскивания к краю экрана.
+    /// У правого края последней страницы создаёт новую пустую страницу.
+    func flipDuringDrag(_ direction: Int) {
+        if direction > 0 {
+            if currentPage >= pages.count - 1 {
+                pages.append(Page(items: []))
+            }
+            nextPage()
+        } else {
+            prevPage()
+        }
+    }
+
+    func beginEdgeHover(_ direction: Int) {
+        guard edgeHoverWork == nil else { return }
+        scheduleEdgeFlip(direction)
+    }
+
+    private func scheduleEdgeFlip(_ direction: Int) {
+        let work = DispatchWorkItem { [weak self] in
+            guard let self else { return }
+            self.edgeHoverWork = nil
+            self.flipDuringDrag(direction)
+            self.scheduleEdgeFlip(direction) // продолжаем листать, пока курсор у края
+        }
+        edgeHoverWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7, execute: work)
+    }
+
+    func cancelEdgeHover() {
+        edgeHoverWork?.cancel()
+        edgeHoverWork = nil
+    }
+
+    /// Убирает пустые страницы (например, оставшиеся после перетаскивания).
+    func pruneEmptyPages() {
+        cancelEdgeHover()
+        let before = pages.count
+        pages = pages.filter { !$0.items.isEmpty }
+        if pages.isEmpty { pages = [Page(items: [])] }
+        if pages.count != before {
+            clampCurrentPage()
+            save()
+        }
+    }
 }

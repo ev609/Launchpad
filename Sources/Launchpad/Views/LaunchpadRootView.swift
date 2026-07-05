@@ -6,6 +6,8 @@ struct LaunchpadRootView: View {
     @FocusState private var searchFocused: Bool
     @State private var draggingID: String?
     @State private var dragOffset: CGFloat = 0
+    @State private var leftEdgeActive = false
+    @State private var rightEdgeActive = false
 
     var body: some View {
         ZStack {
@@ -52,6 +54,10 @@ struct LaunchpadRootView: View {
         .onAppear {
             DispatchQueue.main.async { searchFocused = true }
         }
+        .onChange(of: draggingID) { newValue in
+            // Перетаскивание завершилось — убираем оставшиеся пустые страницы.
+            if newValue == nil { model.pruneEmptyPages() }
+        }
     }
 
     // MARK: - Пейджер
@@ -91,7 +97,31 @@ struct LaunchpadRootView: View {
                         }
                     }
             )
+            .overlay(alignment: .leading) { edgeZone(direction: -1, active: $leftEdgeActive) }
+            .overlay(alignment: .trailing) { edgeZone(direction: 1, active: $rightEdgeActive) }
         }
+    }
+
+    /// Зона у края экрана для переноса элемента на соседнюю страницу.
+    @ViewBuilder
+    private func edgeZone(direction: Int, active: Binding<Bool>) -> some View {
+        let show = draggingID != nil
+        Rectangle()
+            .fill(Color.white.opacity(active.wrappedValue ? 0.12 : 0.001))
+            .frame(width: 64)
+            .overlay(
+                Image(systemName: direction < 0 ? "chevron.left" : "chevron.right")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(.white.opacity(active.wrappedValue ? 0.9 : 0.35))
+                    .opacity(show ? 1 : 0)
+            )
+            .opacity(show ? 1 : 0)
+            .allowsHitTesting(show)
+            .onDrop(of: [.text],
+                    delegate: EdgeDropDelegate(direction: direction,
+                                               model: model,
+                                               draggingID: $draggingID,
+                                               isActive: active))
     }
 
     // MARK: - Точки страниц

@@ -5,4 +5,6 @@ extension Notification.Name {
     static let launchpadShouldClose = Notification.Name("launchpadShouldClose")
     /// Просьба переключить видимость окна Launchpad.
     static let launchpadToggle = Notification.Name("launchpadToggle")
+    /// Настройки изменились (сетка / горячая клавиша).
+    static let launchpadSettingsChanged = Notification.Name("launchpadSettingsChanged")
 }
