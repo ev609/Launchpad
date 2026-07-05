@@ -5,6 +5,7 @@ struct SettingsView: View {
     @ObservedObject private var settings = AppSettings.shared
     @ObservedObject var model: LaunchpadModel
     @State private var importResult: String?
+    @State private var launchAtLogin = LoginItem.isEnabled
 
     var body: some View {
         Form {
@@ -22,6 +23,16 @@ struct SettingsView: View {
                         Text(preset.title).tag(preset)
                     }
                 }
+            }
+
+            Section("Автозапуск") {
+                Toggle("Запускать при входе в систему", isOn: $launchAtLogin)
+                    .onChange(of: launchAtLogin) { newValue in
+                        if !LoginItem.setEnabled(newValue) {
+                            // Откат, если система отклонила.
+                            launchAtLogin = LoginItem.isEnabled
+                        }
+                    }
             }
 
             Section("Раскладка") {

@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var window: KeyableWindow!
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem!
+    private var loginItemMenuItem: NSMenuItem?
     private var hotKeys: [GlobalHotKey] = []
 
     // Мониторы событий (активны только при открытом окне).
@@ -90,9 +91,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "Обновить список приложений",
                      action: #selector(rescan), keyEquivalent: "")
         menu.addItem(.separator())
+        let loginItem = NSMenuItem(title: "Запускать при входе",
+                                   action: #selector(toggleLoginItem), keyEquivalent: "")
+        loginItem.state = LoginItem.isEnabled ? .on : .off
+        loginItemMenuItem = loginItem
+        menu.addItem(loginItem)
         menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "Выход", action: #selector(quit), keyEquivalent: "q")
         for item in menu.items { item.target = self }
+        menu.delegate = self
         statusItem.menu = menu
     }
 
@@ -286,7 +293,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow?.level = .floating
     }
 
+    @objc private func toggleLoginItem() {
+        LoginItem.setEnabled(!LoginItem.isEnabled)
+        loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
+    }
+}
+
+extension AppDelegate: NSMenuDelegate {
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        // Актуализируем галочку автозапуска при открытии меню.
+        loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
     }
 }

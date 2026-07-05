@@ -13,6 +13,14 @@ MainActor.assumeIsolated {
         print("MTTouch stride = \(MemoryLayout<MTTouch>.stride) (ожидается 96)")
         exit(0)
     }
+    if CommandLine.arguments.contains("--login-test") {
+        print("статус до: \(LoginItem.isEnabled)")
+        _ = LoginItem.setEnabled(true)
+        print("после register: \(LoginItem.isEnabled)")
+        _ = LoginItem.setEnabled(false)
+        print("после unregister: \(LoginItem.isEnabled)")
+        exit(0)
+    }
     if CommandLine.arguments.contains("--mt-test") {
         let mt = MultitouchManager()
         mt.start()
