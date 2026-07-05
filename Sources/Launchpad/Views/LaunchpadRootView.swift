@@ -55,8 +55,8 @@ struct LaunchpadRootView: View {
                 }
 
                 // Оверлей открытой папки.
-                if let id = model.openFolderID, let folder = model.folder(withID: id) {
-                    FolderOverlay(folder: folder, model: model)
+                if let id = model.openFolderID {
+                    FolderOverlay(folderID: id, model: model)
                         .zIndex(10)
                 }
             }
@@ -70,6 +70,13 @@ struct LaunchpadRootView: View {
                     }
             )
             .onAppear { DispatchQueue.main.async { searchFocused = true } }
+            .onChange(of: model.openFolderID) { newValue in
+                // При закрытии папки возвращаем фокус полю поиска — иначе первый
+                // клик по фону уходит на переактивацию окна (нужно было два клика).
+                if newValue == nil {
+                    DispatchQueue.main.async { searchFocused = true }
+                }
+            }
         }
     }
 

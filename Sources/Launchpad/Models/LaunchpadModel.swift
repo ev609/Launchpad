@@ -281,6 +281,18 @@ final class LaunchpadModel: ObservableObject {
         save()
     }
 
+    /// Меняет порядок приложений внутри папки.
+    func moveInFolder(_ folderID: String, appID: String, toIndex index: Int) {
+        guard let loc = locate("folder:" + folderID),
+              case .folder(var folder) = pages[loc.page].items[loc.index],
+              let from = folder.apps.firstIndex(where: { $0.id == appID }) else { return }
+        let app = folder.apps.remove(at: from)
+        let dest = max(0, min(index, folder.apps.count))
+        folder.apps.insert(app, at: dest)
+        pages[loc.page].items[loc.index] = .folder(folder)
+        save()
+    }
+
     func renameFolder(_ folderID: String, to name: String) {
         guard let loc = locate("folder:" + folderID),
               case .folder(var folder) = pages[loc.page].items[loc.index] else { return }
