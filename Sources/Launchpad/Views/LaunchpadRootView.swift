@@ -22,7 +22,10 @@ struct LaunchpadRootView: View {
                 Color.black.opacity(0.28)
                     .ignoresSafeArea()
                     .onTapGesture {
-                        if model.openFolderID == nil && !model.isSearching {
+                        if model.openFolderID != nil { return }
+                        if model.isSearching {
+                            model.searchText = ""      // клик вне результатов сбрасывает поиск
+                        } else {
                             NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
                         }
                     }
@@ -263,6 +266,10 @@ struct SearchResultsView: View {
             }
             .padding(.horizontal, 80)
             .padding(.top, 30)
+            .frame(maxWidth: .infinity, minHeight: 700, alignment: .top)
         }
+        .contentShape(Rectangle())
+        // Клик по пустому месту результатов сбрасывает поиск (иконки перехватывают свой tap).
+        .onTapGesture { model.searchText = "" }
     }
 }

@@ -1,8 +1,7 @@
 import SwiftUI
 
-/// Оверлей открытой папки: затемнение + сетка приложений с перемещением
-/// внутри папки и извлечением наружу. Читает актуальную папку из модели,
-/// поэтому изменения (реордер/извлечение) отражаются сразу.
+/// Оверлей открытой папки: матовая панель (вибрантность, размывает фон
+/// позади — как в оригинале) + сетка с перестановкой и извлечением.
 struct FolderOverlay: View {
     let folderID: String
     @ObservedObject var model: LaunchpadModel
@@ -23,7 +22,7 @@ struct FolderOverlay: View {
     var body: some View {
         if let folder {
             ZStack {
-                // Клик по затемнению закрывает папку.
+                // Затемнение фона; клик закрывает папку.
                 Color.black.opacity(0.35)
                     .ignoresSafeArea()
                     .onTapGesture { close() }
@@ -42,40 +41,50 @@ struct FolderOverlay: View {
                 }
                 .padding(36)
                 .background(
-                    RoundedRectangle(cornerRadius: 28, style: .continuous)
-                        .fill(.white.opacity(0.12))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                                .stroke(.white.opacity(0.12), lineWidth: 1)
-                        )
+                    // Матовое стекло: размывает сетку позади панели (.withinWindow).
+                    ZStack {
+                        VisualEffectView(material: .hudWindow, blending: .withinWindow)
+                        Color.black.opacity(0.18)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            .stroke(.white.opacity(0.18), lineWidth: 1)
+                    )
                 )
                 .padding(60)
-                .transition(.scale(scale: 0.9).combined(with: .opacity))
+                .transition(.scale(scale: 0.92).combined(with: .opacity))
             }
             .onAppear { name = folder.name }
         }
     }
 
-    // MARK: - Сетка папки
+    // MARK: - Сетка папки с расступанием
 
     @ViewBuilder
     private func grid(_ folder: Folder) -> some View {
-        let n = folder.apps.count
+        let apps = folder.apps
+        let n = apps.count
         let columns = max(1, min(n, cols))
         let rows = (n + columns - 1) / columns
         let w = CGFloat(columns) * cellW
         let h = CGFloat(rows) * cellH
 
+        let draggedIndex = apps.firstIndex { $0.id == dragAppID }
+        let target = targetInOthers(draggedIndex: draggedIndex, count: n, columns: columns)
+
         ZStack(alignment: .topLeading) {
-            ForEach(Array(folder.apps.enumerated()), id: \.element.id) { index, app in
-                let base = center(index, columns: columns)
+            ForEach(Array(apps.enumerated()), id: \.element.id) { index, app in
                 let dragging = dragAppID == app.id
+                let pos = position(index: index, dragging: dragging,
+                                   draggedIndex: draggedIndex, target: target, columns: columns)
                 AppIconView(app: app)
                     .frame(width: cellW, height: cellH)
                     .scaleEffect(dragging ? 1.12 : 1.0)
-                    .position(x: base.x + (dragging ? dragTranslation.width : 0),
-                              y: base.y + (dragging ? dragTranslation.height : 0))
+                    .position(pos)
                     .zIndex(dragging ? 1 : 0)
+                    .animation(dragging ? .none : .spring(response: 0.28, dampingFraction: 0.74),
+                               value: pos)
                     .onTapGesture { launch(app) }
                     .gesture(
                         DragGesture()
@@ -85,13 +94,39 @@ struct FolderOverlay: View {
                             }
                             .onEnded { value in
                                 endDrag(app: app, index: index, columns: columns,
-                                        gridSize: CGSize(width: w, height: h), value: value)
+                                        gridSize: CGSize(width: w, height: h),
+                                        target: target, value: value)
                             }
                     )
             }
         }
         .frame(width: w, height: h)
-        .animation(.spring(response: 0.3, dampingFraction: 0.78), value: folder.apps)
+    }
+
+    /// Позиция вставки перетаскиваемого элемента в списке без него (others-space).
+    private func targetInOthers(draggedIndex: Int?, count: Int, columns: Int) -> Int? {
+        guard let di = draggedIndex else { return nil }
+        let base = center(di, columns: columns)
+        let cur = CGPoint(x: base.x + dragTranslation.width, y: base.y + dragTranslation.height)
+        let rows = (count + columns - 1) / columns
+        let col = min(max(Int(cur.x / cellW), 0), columns - 1)
+        let row = min(max(Int(cur.y / cellH), 0), max(rows - 1, 0))
+        return min(max(row * columns + col, 0), count - 1)
+    }
+
+    private func position(index: Int, dragging: Bool, draggedIndex: Int?,
+                          target: Int?, columns: Int) -> CGPoint {
+        if dragging {
+            let base = center(index, columns: columns)
+            return CGPoint(x: base.x + dragTranslation.width, y: base.y + dragTranslation.height)
+        }
+        guard let di = draggedIndex, let t = target else {
+            return center(index, columns: columns)
+        }
+        // Индекс в списке без перетаскиваемого; соседи расступаются вокруг «дыры».
+        let p = index < di ? index : index - 1
+        let slot = p < t ? p : p + 1
+        return center(slot, columns: columns)
     }
 
     private func center(_ index: Int, columns: Int) -> CGPoint {
@@ -102,7 +137,7 @@ struct FolderOverlay: View {
     }
 
     private func endDrag(app: AppEntry, index: Int, columns: Int,
-                         gridSize: CGSize, value: DragGesture.Value) {
+                         gridSize: CGSize, target: Int?, value: DragGesture.Value) {
         defer { dragAppID = nil; dragTranslation = .zero }
         let base = center(index, columns: columns)
         let final = CGPoint(x: base.x + value.translation.width,
@@ -115,14 +150,9 @@ struct FolderOverlay: View {
             model.extractApp(app.id, fromFolder: folderID)
             return
         }
-
-        // Иначе — перестановка внутри папки на ближайший слот.
-        let n = model.folder(withID: folderID)?.apps.count ?? 1
-        let rows = (n + columns - 1) / columns
-        let col = min(max(Int(final.x / cellW), 0), columns - 1)
-        let row = min(max(Int(final.y / cellH), 0), max(rows - 1, 0))
-        let target = min(max(row * columns + col, 0), n - 1)
-        model.moveInFolder(folderID, appID: app.id, toIndex: target)
+        if let t = target {
+            model.moveInFolder(folderID, appID: app.id, toIndex: t)
+        }
     }
 
     private func launch(_ app: AppEntry) {
