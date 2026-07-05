@@ -5,9 +5,6 @@ struct LaunchpadRootView: View {
     @ObservedObject var model: LaunchpadModel
     @FocusState private var searchFocused: Bool
 
-    // Свайп между страницами (когда ничего не перетаскиваем).
-    @State private var swipeOffset: CGFloat = 0
-
     // Активное перетаскивание.
     @State private var drag: DragState?
     // Кандидат в папку и момент начала наведения (для задержки).
@@ -96,26 +93,11 @@ struct LaunchpadRootView: View {
             }
         }
         .frame(width: metrics.size.width, alignment: .leading)
-        .offset(x: -CGFloat(model.currentPage) * metrics.size.width + swipeOffset)
+        .offset(x: -CGFloat(model.currentPage) * metrics.size.width)
         .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.currentPage)
-        .contentShape(Rectangle())
-        .gesture(
-            // Свайп страниц активен, только когда не перетаскиваем иконку.
-            DragGesture(minimumDistance: 20)
-                .onChanged { value in
-                    guard drag == nil else { return }
-                    if abs(value.translation.width) > abs(value.translation.height) {
-                        swipeOffset = value.translation.width
-                    }
-                }
-                .onEnded { value in
-                    guard drag == nil else { swipeOffset = 0; return }
-                    let threshold = metrics.size.width * 0.18
-                    if value.translation.width < -threshold { model.nextPage() }
-                    else if value.translation.width > threshold { model.prevPage() }
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { swipeOffset = 0 }
-                }
-        )
+        // Свайп-жеста здесь НЕТ намеренно: он конкурировал с перетаскиванием иконок.
+        // Листание страниц — двухпальцевым скроллом (это scroll, а не drag),
+        // стрелками ←/→ и точками внизу.
     }
 
     /// Подсказка-стрелка у края, видна при перетаскивании.

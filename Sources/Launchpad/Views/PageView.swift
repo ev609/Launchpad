@@ -111,7 +111,7 @@ struct PageView: View {
             .contentShape(Rectangle())
             .onTapGesture { activate(item) }
             .highPriorityGesture(
-                DragGesture(minimumDistance: 8, coordinateSpace: .named("root"))
+                DragGesture(minimumDistance: 5, coordinateSpace: .named("root"))
                     .onChanged { value in
                         if drag == nil {
                             onBeginDrag(item, value)
