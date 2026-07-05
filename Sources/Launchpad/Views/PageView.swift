@@ -5,10 +5,13 @@ struct GridMetrics {
     let size: CGSize
     let columns: Int
     let rows: Int
+    var safeTop: CGFloat = 0        // высота выреза («острова») сверху
 
-    let topInset: CGFloat = 96     // место под поле поиска
     let bottomInset: CGFloat = 72  // место под точки страниц
     let sidePad: CGFloat = 80
+
+    // Верхний отступ = место под поле поиска, с учётом выреза камеры.
+    var topInset: CGFloat { max(96, safeTop + 64) }
 
     var gridHeight: CGFloat { max(1, size.height - topInset - bottomInset) }
     var cellW: CGFloat { max(1, (size.width - 2 * sidePad) / CGFloat(columns)) }
@@ -66,6 +69,9 @@ struct PageView: View {
             ForEach(Array(layout.enumerated()), id: \.element.item.id) { _, placed in
                 cell(placed.item)
                     .frame(width: metrics.cellW, height: metrics.cellH)
+                    // ВАЖНО: перетаскиваемую ячейку НЕ удаляем, а прячем (opacity 0),
+                    // иначе SwiftUI уничтожит view вместе с активным жестом и драг «зависнет».
+                    .opacity(placed.dragged ? 0 : 1)
                     .position(metrics.center(placed.slot))
                     .animation(.spring(response: 0.32, dampingFraction: 0.75), value: placed.slot)
             }
@@ -74,25 +80,33 @@ struct PageView: View {
 
     // MARK: - Раскладка со «дырой»
 
-    private struct Placed { let item: LaunchpadItem; let slot: Int }
+    private struct Placed { let item: LaunchpadItem; let slot: Int; let dragged: Bool }
 
     /// Вычисляет, в каком слоте показать каждый элемент с учётом перетаскивания.
+    /// Перетаскиваемый элемент остаётся смонтированным (невидимым) — чтобы жест
+    /// не оборвался; остальные расступаются вокруг «дыры» на позиции вставки.
     private var layout: [Placed] {
-        var items = page.items
-        // Перетаскиваемый элемент со своей страницы убираем (он «летит» отдельно).
-        if let d = drag, let idx = items.firstIndex(where: { $0.id == d.itemID }) {
-            items.remove(at: idx)
+        let items = page.items
+        guard let d = drag else {
+            return items.enumerated().map { Placed(item: $0.element, slot: $0.offset, dragged: false) }
         }
 
-        let isTargetPage = drag != nil && pageIndex == model.currentPage
-        // При режиме «папка» дыру не делаем — просто подсвечиваем цель.
-        let hole = (isTargetPage && drag?.folderTargetID == nil) ? drag?.insertionIndex : nil
+        let isTargetPage = pageIndex == model.currentPage
+        let hole = (isTargetPage && d.folderTargetID == nil) ? d.insertionIndex : -1
 
-        return items.enumerated().map { p, item in
-            var slot = p
-            if let hole, p >= hole { slot = p + 1 }
-            return Placed(item: item, slot: slot)
+        var placed: [Placed] = []
+        var slot = 0
+        for item in items {
+            if item.id == d.itemID {
+                // Паркуем невидимой на позиции «дыры» — view остаётся живой.
+                placed.append(Placed(item: item, slot: max(0, hole), dragged: true))
+                continue
+            }
+            if slot == hole { slot += 1 } // пропускаем слот-дыру
+            placed.append(Placed(item: item, slot: slot, dragged: false))
+            slot += 1
         }
+        return placed
     }
 
     // MARK: - Ячейка

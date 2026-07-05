@@ -13,7 +13,9 @@ struct LaunchpadRootView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let metrics = GridMetrics(size: geo.size, columns: model.columns, rows: model.rows)
+            let safeTop = NSScreen.main?.safeAreaInsets.top ?? 0
+            let metrics = GridMetrics(size: geo.size, columns: model.columns,
+                                      rows: model.rows, safeTop: safeTop)
 
             ZStack {
                 // Фон: размытие рабочего стола + затемнение.
@@ -29,13 +31,13 @@ struct LaunchpadRootView: View {
 
                 if model.isSearching {
                     VStack(spacing: 0) {
-                        searchField.padding(.top, 28)
+                        searchField.padding(.top, safeTop + 16)
                         SearchResultsView(model: model)
                     }
                 } else {
                     pager(metrics)
                     VStack(spacing: 0) {
-                        searchField.padding(.top, 28)
+                        searchField.padding(.top, safeTop + 16)
                         Spacer()
                         pageDots.padding(.bottom, 24)
                     }
