@@ -166,8 +166,8 @@ struct FolderOverlay: View {
 
     private func close() {
         commitName()
-        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-            model.openFolderID = nil
-        }
+        // Без анимации: анимированно исчезающий оверлей ещё ловит клики,
+        // из-за чего первый клик по сетке был «мёртвым» (нужно было два клика).
+        model.openFolderID = nil
     }
 }
