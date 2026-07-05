@@ -13,6 +13,14 @@ MainActor.assumeIsolated {
         print("MTTouch stride = \(MemoryLayout<MTTouch>.stride) (ожидается 96)")
         exit(0)
     }
+    if CommandLine.arguments.contains("--enable-keepalive") {
+        print("enable:", KeepAliveService.setEnabled(true), "isEnabled:", KeepAliveService.isEnabled)
+        exit(0)
+    }
+    if CommandLine.arguments.contains("--disable-keepalive") {
+        print("disable:", KeepAliveService.setEnabled(false), "isEnabled:", KeepAliveService.isEnabled)
+        exit(0)
+    }
     if CommandLine.arguments.contains("--login-test") {
         print("статус до: \(LoginItem.isEnabled)")
         _ = LoginItem.setEnabled(true)

@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var settingsWindow: NSWindow?
     private var statusItem: NSStatusItem!
     private var loginItemMenuItem: NSMenuItem?
+    private var keepAliveMenuItem: NSMenuItem?
     private var hotKeys: [GlobalHotKey] = []
 
     // Мониторы событий (активны только при открытом окне).
@@ -29,6 +30,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let multitouch = MultitouchManager()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Single-instance guard: если уже запущена копия — тихо выходим,
+        // иначе login item + LaunchAgent дадут два процесса.
+        if isDuplicateInstance() {
+            NSApp.terminate(nil)
+            return
+        }
         model.load()
         buildWindow()
         buildStatusItem()
@@ -96,6 +103,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loginItem.state = LoginItem.isEnabled ? .on : .off
         loginItemMenuItem = loginItem
         menu.addItem(loginItem)
+
+        let keepAlive = NSMenuItem(title: "Держать запущенным (авто-перезапуск)",
+                                   action: #selector(toggleKeepAlive), keyEquivalent: "")
+        keepAlive.state = KeepAliveService.isEnabled ? .on : .off
+        keepAliveMenuItem = keepAlive
+        menu.addItem(keepAlive)
+
         menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
         menu.addItem(withTitle: "Выход", action: #selector(quit), keyEquivalent: "q")
         for item in menu.items { item.target = self }
@@ -298,6 +312,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
     }
 
+    @objc private func toggleKeepAlive() {
+        KeepAliveService.setEnabled(!KeepAliveService.isEnabled)
+        keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
+    }
+
+    private func isDuplicateInstance() -> Bool {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
+        let me = NSRunningApplication.current
+        return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
+            .contains { $0.processIdentifier != me.processIdentifier }
+    }
+
     @objc private func quit() {
         NSApp.terminate(nil)
     }
@@ -305,7 +331,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 extension AppDelegate: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
-        // Актуализируем галочку автозапуска при открытии меню.
+        // Актуализируем галочки при открытии меню.
         loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
+        keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
     }
 }

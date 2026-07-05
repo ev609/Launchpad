@@ -6,6 +6,7 @@ struct SettingsView: View {
     @ObservedObject var model: LaunchpadModel
     @State private var importResult: String?
     @State private var launchAtLogin = LoginItem.isEnabled
+    @State private var keepAlive = KeepAliveService.isEnabled
 
     var body: some View {
         Form {
@@ -33,6 +34,13 @@ struct SettingsView: View {
                             launchAtLogin = LoginItem.isEnabled
                         }
                     }
+                Toggle("Держать запущенным (авто-перезапуск)", isOn: $keepAlive)
+                    .onChange(of: keepAlive) { newValue in
+                        KeepAliveService.setEnabled(newValue)
+                    }
+                Text("Перезапуск при крахе/принудительном завершении и старт при входе. Осознанный «Выйти» уважается.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Section("Раскладка") {
