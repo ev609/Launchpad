@@ -50,8 +50,10 @@ private func multitouchCallback(_ device: UnsafeMutableRawPointer?,
 final class MultitouchManager {
     static var shared: MultitouchManager?
 
-    /// Вызывается на главном потоке при распознавании щипка внутрь.
+    /// Вызывается на главном потоке при щипке внутрь (сведение пальцев).
     var onPinchIn: (() -> Void)?
+    /// Вызывается на главном потоке при щипке наружу (разведение пальцев).
+    var onPinchOut: (() -> Void)?
 
     private var devices: [MTDeviceRef] = []
     private var handle: UnsafeMutableRawPointer?
@@ -62,7 +64,8 @@ final class MultitouchManager {
     private(set) var maxTouchesSeen: Int = 0
 
     // Состояние распознавания (доступ только из callback-потока).
-    private var baselineRadius: Float?
+    private var minRadius: Float?
+    private var maxRadius: Float?
     private var lastFire: Double = 0
 
     init() {
@@ -98,7 +101,8 @@ final class MultitouchManager {
     func handle(touches: UnsafeMutablePointer<MTTouch>?, count: Int) {
         if count > maxTouchesSeen { maxTouchesSeen = count }
         guard let touches, count >= 3, count <= 5 else {
-            baselineRadius = nil
+            minRadius = nil
+            maxRadius = nil
             return
         }
         let buf = UnsafeBufferPointer(start: touches, count: count)
@@ -117,22 +121,25 @@ final class MultitouchManager {
         }
         radius /= Float(count)
 
-        guard let baseline = baselineRadius else {
-            baselineRadius = radius
-            return
-        }
+        // Обновляем экстремумы за текущий жест.
+        minRadius = min(minRadius ?? radius, radius)
+        maxRadius = max(maxRadius ?? radius, radius)
+        guard let lo = minRadius, let hi = maxRadius else { return }
 
-        // Пальцы заметно сошлись к центру → щипок внутрь.
-        if baseline - radius > 0.08 && radius < 0.22 {
-            let now = ProcessInfo.processInfo.systemUptime
-            if now - lastFire > 1.0 {
-                lastFire = now
-                DispatchQueue.main.async { [weak self] in self?.onPinchIn?() }
-            }
-            baselineRadius = nil
-        } else {
-            // База — максимальный разброс за жест.
-            baselineRadius = max(baseline, radius)
+        let now = ProcessInfo.processInfo.systemUptime
+        guard now - lastFire > 1.0 else { return }
+
+        // Сведение к центру → щипок внутрь (открыть).
+        if hi - radius > 0.08 && radius < 0.22 {
+            lastFire = now
+            minRadius = nil; maxRadius = nil
+            DispatchQueue.main.async { [weak self] in self?.onPinchIn?() }
+        }
+        // Разведение от центра → щипок наружу (закрыть).
+        else if radius - lo > 0.08 {
+            lastFire = now
+            minRadius = nil; maxRadius = nil
+            DispatchQueue.main.async { [weak self] in self?.onPinchOut?() }
         }
     }
 }

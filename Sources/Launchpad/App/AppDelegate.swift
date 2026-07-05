@@ -34,10 +34,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         registerHotKeys()
         observeNotifications()
 
-        // Щипок трекпадом (несколько пальцев внутрь) открывает Launchpad.
+        // Щипок трекпадом: сведение пальцев открывает, разведение — закрывает.
         multitouch.onPinchIn = { [weak self] in
             guard let self, !self.window.isVisible else { return }
             self.show()
+        }
+        multitouch.onPinchOut = { [weak self] in
+            guard let self, self.window.isVisible, self.model.openFolderID == nil else { return }
+            self.hide()
         }
         multitouch.start()
 
