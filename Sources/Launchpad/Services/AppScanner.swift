@@ -15,6 +15,20 @@ enum AppScanner {
         ]
     }
 
+    /// Дешёвый отпечаток каталогов приложений: даты изменения самих папок.
+    ///
+    /// Нужен, чтобы пересканировать ТОЛЬКО когда состав приложений действительно менялся.
+    /// Полный `scan()` на каждое открытие окна — это лишний обход десятков бандлов и
+    /// заметная задержка перед показом сетки. mtime каталога меняется при добавлении или
+    /// удалении `.app` внутри него, поэтому сравнения отпечатка достаточно.
+    static func fingerprint() -> String {
+        let fm = FileManager.default
+        return searchPaths.map { path -> String in
+            let date = (try? fm.attributesOfItem(atPath: path)[.modificationDate] as? Date) ?? nil
+            return "\(path):\(date?.timeIntervalSince1970 ?? 0)"
+        }.joined(separator: "|")
+    }
+
     /// Возвращает уникальный список приложений, отсортированный по имени.
     static func scan() -> [AppEntry] {
         var found: [String: AppEntry] = [:]

@@ -20,6 +20,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var keepAliveMenuItem: NSMenuItem?
     private var updateMenuItem: NSMenuItem?
     private var autoUpdateMenuItem: NSMenuItem?
+    /// Отпечаток каталогов приложений на момент последнего сканирования (см. refreshAppsIfChanged).
+    private var lastAppsFingerprint = AppScanner.fingerprint()
     private var pendingUpdate: Updater.Update?
     private var updateTimer: Timer?
     private var hotKeys: [GlobalHotKey] = []
@@ -213,6 +215,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func show() {
+        refreshAppsIfChanged()
         let screen = activeScreen()
         window.setFrame(screen.frame, display: true)
         model.searchText = ""
@@ -220,6 +223,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
         installMonitors()
+    }
+
+    /// Подхватывает новые/удалённые приложения при открытии Launchpad.
+    ///
+    /// Раньше состав приложений считывался ТОЛЬКО при старте, а пересканирование жило
+    /// в пункте меню. Свежеустановленное приложение не появлялось, и это читалось как
+    /// «оно не установилось» — пользователь шёл искать несуществующую проблему в системе
+    /// (реальный случай 11.07.2026: три новых .app лежали в /Applications, а Launchpad их
+    /// не показывал).
+    ///
+    /// Сканируем не всегда, а только когда каталоги приложений реально менялись: полный
+    /// обход бандлов на каждое открытие — лишняя задержка перед показом сетки.
+    /// `model.load()` сшивает найденное с сохранённой раскладкой (reconcile), поэтому
+    /// расстановка иконок и папки пользователя не теряются.
+    private func refreshAppsIfChanged() {
+        let current = AppScanner.fingerprint()
+        guard current != lastAppsFingerprint else { return }
+        lastAppsFingerprint = current
+        model.load()
     }
 
     func hide() {
