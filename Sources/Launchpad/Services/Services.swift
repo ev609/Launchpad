@@ -2,15 +2,35 @@ import AppKit
 
 /// Кэш иконок приложений (иконки тяжёлые — держим их в памяти).
 /// Используется только из главного потока (SwiftUI).
+///
+/// ⚠️ Кэш инвалидируется по дате изменения бандла. Без этого сменившаяся иконка
+/// приложения не появлялась НИКОГДА в пределах запуска: путь тот же → отдавалась
+/// старая картинка из памяти, и помогал только перезапуск Launchpad. Ровно так и
+/// вышло 12.07.2026 — иконки ярлыков поменяли, а Launchpad показывал прежние.
 final class IconCache {
     static let shared = IconCache()
-    private var cache: [String: NSImage] = [:]
+
+    private struct Entry {
+        let image: NSImage
+        let modified: Date?
+    }
+
+    private var cache: [String: Entry] = [:]
+
+    /// Дата изменения бандла. У .app при смене иконки обновляется mtime самого
+    /// каталога (кастомная иконка пишется в атрибуты файла), поэтому этого хватает.
+    private func modifiedAt(_ path: String) -> Date? {
+        (try? FileManager.default.attributesOfItem(atPath: path))?[.modificationDate] as? Date
+    }
 
     func icon(for path: String) -> NSImage {
-        if let img = cache[path] { return img }
+        let modified = modifiedAt(path)
+        if let hit = cache[path], hit.modified == modified {
+            return hit.image
+        }
         let img = NSWorkspace.shared.icon(forFile: path)
         img.size = NSSize(width: 128, height: 128)
-        cache[path] = img
+        cache[path] = Entry(image: img, modified: modified)
         return img
     }
 }
