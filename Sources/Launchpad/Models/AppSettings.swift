@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import Carbon.HIToolbox
 
 struct LaunchpadNavigationState: Equatable {
@@ -13,6 +13,8 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
     case f4
     case optCmdSpace
     case ctrlSpace
+    /// Сочетание, записанное пользователем (`AppSettings.customHotkey`).
+    case custom
     case none
 
     var id: String { rawValue }
@@ -22,17 +24,18 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
         case .f4:          return "F4"
         case .optCmdSpace: return "⌥⌘Space"
         case .ctrlSpace:   return "⌃Space"
+        case .custom:      return "Своё сочетание"
         case .none:        return "Без горячей клавиши"
         }
     }
 
-    /// Код клавиши (nil — хоткей отключён).
+    /// Код клавиши (nil — хоткей отключён или задан пользователем).
     var keyCode: UInt32? {
         switch self {
         case .f4:          return UInt32(kVK_F4)
         case .optCmdSpace: return UInt32(kVK_Space)
         case .ctrlSpace:   return UInt32(kVK_Space)
-        case .none:        return nil
+        case .custom, .none: return nil
         }
     }
 
@@ -41,8 +44,61 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
         case .f4:          return 0
         case .optCmdSpace: return UInt32(optionKey | cmdKey)
         case .ctrlSpace:   return UInt32(controlKey)
-        case .none:        return 0
+        case .custom, .none: return 0
         }
+    }
+}
+
+/// Записанное пользователем сочетание: Carbon-код клавиши и модификаторы.
+struct CustomHotkey: Codable, Equatable {
+    var keyCode: UInt32
+    var modifiers: UInt32
+    /// Имя клавиши на момент записи (с учётом раскладки).
+    var keyName: String
+
+    var title: String {
+        var result = ""
+        if modifiers & UInt32(controlKey) != 0 { result += "⌃" }
+        if modifiers & UInt32(optionKey) != 0 { result += "⌥" }
+        if modifiers & UInt32(shiftKey) != 0 { result += "⇧" }
+        if modifiers & UInt32(cmdKey) != 0 { result += "⌘" }
+        return result + keyName
+    }
+
+    private static let functionKeys: [Int: String] = [
+        kVK_F1: "F1", kVK_F2: "F2", kVK_F3: "F3", kVK_F4: "F4", kVK_F5: "F5",
+        kVK_F6: "F6", kVK_F7: "F7", kVK_F8: "F8", kVK_F9: "F9", kVK_F10: "F10",
+        kVK_F11: "F11", kVK_F12: "F12", kVK_F13: "F13", kVK_F14: "F14", kVK_F15: "F15",
+        kVK_F16: "F16", kVK_F17: "F17", kVK_F18: "F18", kVK_F19: "F19", kVK_F20: "F20",
+    ]
+
+    private static let namedKeys: [Int: String] = [
+        kVK_Space: "Space", kVK_Return: "↩", kVK_Tab: "⇥", kVK_Delete: "⌫",
+        kVK_ForwardDelete: "⌦", kVK_LeftArrow: "←", kVK_RightArrow: "→",
+        kVK_UpArrow: "↑", kVK_DownArrow: "↓", kVK_Home: "↖", kVK_End: "↘",
+        kVK_PageUp: "⇞", kVK_PageDown: "⇟",
+    ]
+
+    /// Сочетание из нажатия в окне записи. nil — нажатие не годится:
+    /// обычной клавише без ⌘/⌥/⌃ нужен модификатор, иначе она перехватит набор текста.
+    static func make(keyCode: UInt16, modifierFlags: NSEvent.ModifierFlags,
+                     characters: String?) -> CustomHotkey? {
+        let code = Int(keyCode)
+        let flags = modifierFlags.intersection(.deviceIndependentFlagsMask)
+        var carbon: UInt32 = 0
+        if flags.contains(.command) { carbon |= UInt32(cmdKey) }
+        if flags.contains(.option) { carbon |= UInt32(optionKey) }
+        if flags.contains(.control) { carbon |= UInt32(controlKey) }
+        if flags.contains(.shift) { carbon |= UInt32(shiftKey) }
+
+        let isFunctionKey = functionKeys[code] != nil
+        let hasRealModifier = carbon & UInt32(cmdKey | optionKey | controlKey) != 0
+        guard isFunctionKey || hasRealModifier else { return nil }
+
+        let name = functionKeys[code] ?? namedKeys[code]
+            ?? characters?.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+        guard let name, !name.isEmpty else { return nil }
+        return CustomHotkey(keyCode: UInt32(code), modifiers: carbon, keyName: name)
     }
 }
 
@@ -56,6 +112,7 @@ final class AppSettings: ObservableObject {
         static let columns = "grid.columns"
         static let rows = "grid.rows"
         static let hotkey = "hotkey.preset"
+        static let customHotkey = "hotkey.custom"
         static let autoUpdate = "update.auto"
         static let pinchGesture = "gesture.pinch"
         static let hiddenAppIDs = "apps.hiddenIDs"
@@ -74,6 +131,25 @@ final class AppSettings: ObservableObject {
     }
     @Published var hotkey: HotkeyPreset {
         didSet { defaults.set(hotkey.rawValue, forKey: Keys.hotkey) }
+    }
+    @Published var customHotkey: CustomHotkey? {
+        didSet {
+            if let customHotkey, let data = try? JSONEncoder().encode(customHotkey) {
+                defaults.set(data, forKey: Keys.customHotkey)
+            } else {
+                defaults.removeObject(forKey: Keys.customHotkey)
+            }
+        }
+    }
+
+    /// Сочетание для регистрации: пресет или записанное. nil — отключено.
+    var effectiveHotkey: (keyCode: UInt32, modifiers: UInt32, title: String)? {
+        if hotkey == .custom {
+            guard let customHotkey else { return nil }
+            return (customHotkey.keyCode, customHotkey.modifiers, customHotkey.title)
+        }
+        guard let code = hotkey.keyCode else { return nil }
+        return (code, hotkey.modifiers, hotkey.title)
     }
     /// Автоматически скачивать и ставить обновления (по умолчанию включено).
     @Published var autoUpdate: Bool {
@@ -97,7 +173,12 @@ final class AppSettings: ObservableObject {
         let r = d.integer(forKey: Keys.rows)
         columns = c == 0 ? 7 : max(4, min(c, 10))
         rows = r == 0 ? 5 : max(3, min(r, 8))
-        hotkey = HotkeyPreset(rawValue: d.string(forKey: Keys.hotkey) ?? "") ?? .f4
+        let storedCustom = d.data(forKey: Keys.customHotkey)
+            .flatMap { try? JSONDecoder().decode(CustomHotkey.self, from: $0) }
+        let preset = HotkeyPreset(rawValue: d.string(forKey: Keys.hotkey) ?? "") ?? .f4
+        // Записанное сочетание потерялось — возвращаем F4, а не тихо отключаем.
+        hotkey = preset == .custom && storedCustom == nil ? .f4 : preset
+        customHotkey = storedCustom
         // Нет сохранённого значения → по умолчанию true.
         autoUpdate = d.object(forKey: Keys.autoUpdate) == nil ? true : d.bool(forKey: Keys.autoUpdate)
         pinchGesture = d.object(forKey: Keys.pinchGesture) == nil ? true : d.bool(forKey: Keys.pinchGesture)

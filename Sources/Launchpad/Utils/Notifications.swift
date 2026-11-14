@@ -14,4 +14,7 @@ extension Notification.Name {
     static let launchpadSettingsChanged = Notification.Name("launchpadSettingsChanged")
     /// Изменился набор пользовательских каталогов приложений.
     static let launchpadAppDirectoriesChanged = Notification.Name("launchpadAppDirectoriesChanged")
+    /// Началась (object = true) или закончилась запись горячей клавиши в настройках:
+    /// на это время глобальное сочетание снимается, иначе его нельзя записать.
+    static let launchpadHotkeyRecording = Notification.Name("launchpadHotkeyRecording")
 }

@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import UniformTypeIdentifiers
+import Carbon.HIToolbox
 
 /// Окно настроек: размер сетки, горячая клавиша, действия с раскладкой.
 struct SettingsView: View {
@@ -26,8 +27,17 @@ struct SettingsView: View {
 
             Section("Горячая клавиша") {
                 Picker("Открыть Launchpad", selection: $settings.hotkey) {
-                    ForEach(HotkeyPreset.allCases) { preset in
-                        Text(preset.title).tag(preset)
+                    ForEach(HotkeyPreset.allCases.filter { $0 != .custom || settings.customHotkey != nil }) { preset in
+                        Text(preset == .custom ? settings.customHotkey?.title ?? preset.title : preset.title)
+                            .tag(preset)
+                    }
+                }
+                HotkeyRecorder { recorded in
+                    settings.customHotkey = recorded
+                    if settings.hotkey == .custom {
+                        notifyChanged()
+                    } else {
+                        settings.hotkey = .custom
                     }
                 }
             }
@@ -173,7 +183,7 @@ struct SettingsView: View {
         keepAlive = StartupManager.keepsAlive
     }
 
-    private func notifyChanged() {
+    fileprivate func notifyChanged() {
         NotificationCenter.default.post(name: .launchpadSettingsChanged, object: nil)
     }
 
@@ -218,5 +228,53 @@ struct SettingsView: View {
         } else {
             importResult = "Этот каталог уже добавлен."
         }
+    }
+}
+
+/// Кнопка записи сочетания: следующее нажатие в окне настроек становится
+/// горячей клавишей. Esc отменяет запись.
+private struct HotkeyRecorder: View {
+    let onRecord: (CustomHotkey) -> Void
+
+    @State private var monitor: Any?
+    @State private var hint: String?
+
+    var body: some View {
+        HStack {
+            Button(monitor == nil ? "Записать своё сочетание…" : "Нажмите сочетание (Esc — отмена)") {
+                monitor == nil ? start() : stop()
+            }
+            if let hint {
+                Text(hint).font(.caption).foregroundStyle(.secondary)
+            }
+        }
+        .onDisappear { stop() }
+    }
+
+    private func start() {
+        hint = nil
+        NotificationCenter.default.post(name: .launchpadHotkeyRecording, object: true)
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            if event.keyCode == UInt16(kVK_Escape) {
+                stop()
+                return nil
+            }
+            if let hotkey = CustomHotkey.make(keyCode: event.keyCode,
+                                              modifierFlags: event.modifierFlags,
+                                              characters: event.charactersIgnoringModifiers) {
+                stop()
+                onRecord(hotkey)
+            } else {
+                hint = "Добавьте ⌘, ⌥ или ⌃ (без них можно только F1–F20)."
+            }
+            return nil
+        }
+    }
+
+    private func stop() {
+        guard let monitor else { return }
+        NSEvent.removeMonitor(monitor)
+        self.monitor = nil
+        NotificationCenter.default.post(name: .launchpadHotkeyRecording, object: false)
     }
 }

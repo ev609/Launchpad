@@ -270,13 +270,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotKeys.forEach { $0.unregister() }
         hotKeys.removeAll()
         model.hotkeyError = nil
-        let preset = AppSettings.shared.hotkey
-        guard let code = preset.keyCode else { return }
-        if let hk = GlobalHotKey(keyCode: code, modifiers: preset.modifiers, id: 1,
+        guard let hotkey = AppSettings.shared.effectiveHotkey else { return }
+        if let hk = GlobalHotKey(keyCode: hotkey.keyCode, modifiers: hotkey.modifiers, id: 1,
                                  callback: { [weak self] in self?.toggle() }) {
             hotKeys.append(hk)
         } else {
-            model.hotkeyError = "Не удалось назначить «\(preset.title)». Возможно, сочетание занято. Выберите другое в настройках."
+            model.hotkeyError = "Не удалось назначить «\(hotkey.title)». Возможно, сочетание занято. Выберите другое в настройках."
         }
     }
 
@@ -305,6 +304,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.model.applyGridChange()
                 self?.registerHotKeys()
                 if self?.testingUI == false { self?.updatePinchGesture() }
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .launchpadHotkeyRecording, object: nil, queue: .main) { [weak self] notification in
+            let recording = notification.object as? Bool == true
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if recording {
+                    self.hotKeys.forEach { $0.unregister() }
+                    self.hotKeys.removeAll()
+                } else {
+                    self.registerHotKeys()
+                }
             }
         }
         NotificationCenter.default.addObserver(
