@@ -24,8 +24,8 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
         case .f4:          return "F4"
         case .optCmdSpace: return "⌥⌘Space"
         case .ctrlSpace:   return "⌃Space"
-        case .custom:      return "Своё сочетание"
-        case .none:        return "Без горячей клавиши"
+        case .custom:      return L("Своё сочетание")
+        case .none:        return L("Без горячей клавиши")
         }
     }
 

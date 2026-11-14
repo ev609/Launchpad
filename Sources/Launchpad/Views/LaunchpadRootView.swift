@@ -149,7 +149,7 @@ struct LaunchpadRootView: View {
                 Text(model.operationError ?? "")
             }
             .confirmationDialog(
-                model.pendingDelete.map { "Удалить «\($0.name)»?" } ?? "",
+                model.pendingDelete.map { L("Удалить «%@»?", $0.name) } ?? "",
                 isPresented: Binding(get: { model.pendingDelete != nil },
                                      set: { if !$0 { model.pendingDelete = nil } }),
                 presenting: model.pendingDelete
@@ -166,7 +166,7 @@ struct LaunchpadRootView: View {
                 }
                 Button("Отмена", role: .cancel) {}
             } message: { app in
-                Text("«\(app.name)» будет перемещено в Корзину.")
+                Text(L("«%@» будет перемещено в Корзину.", app.name))
             }
         }
     }
@@ -301,8 +301,8 @@ struct LaunchpadRootView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(Text("Страница \(index + 1)"))
-                .accessibilityValue(index == model.currentPage ? "Выбрано" : "")
+                .accessibilityLabel(Text(L("Страница %@", String(index + 1))))
+                .accessibilityValue(index == model.currentPage ? L("Выбрано") : "")
                 .accessibilityIdentifier("page.\(index)")
             }
         }
@@ -479,7 +479,7 @@ struct SearchResultsView: View {
                         .accessibilityLabel(Text(app.name))
                         .accessibilityIdentifier("search." + app.id)
                         .accessibilityAddTraits(.isButton)
-                        .accessibilityValue(model.selectedSearchID == app.id ? "Выбрано" : "")
+                        .accessibilityValue(model.selectedSearchID == app.id ? L("Выбрано") : "")
                         .accessibilityAction { AppLauncher.launch(app) }
                 }
             }

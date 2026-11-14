@@ -45,7 +45,7 @@ final class PerformanceMetrics: ObservableObject {
     func recordAdaptiveActivation() { adaptiveActivationCount += 1 }
 
     static func durationText(_ duration: TimeInterval?) -> String {
-        guard let duration else { return "ещё нет данных" }
-        return String(format: "%.1f мс", duration * 1_000)
+        guard let duration else { return L("ещё нет данных") }
+        return String(format: L("%.1f мс"), duration * 1_000)
     }
 }

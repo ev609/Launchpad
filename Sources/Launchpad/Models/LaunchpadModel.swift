@@ -50,8 +50,8 @@ final class LaunchpadModel: ObservableObject {
     @Published var hotkeyError: String?
     @Published private(set) var canUndo = false
     @Published private(set) var canRedo = false
-    @Published private(set) var undoTitle = "Отменить"
-    @Published private(set) var redoTitle = "Повторить"
+    @Published private(set) var undoTitle = L("Отменить")
+    @Published private(set) var redoTitle = L("Повторить")
     var layoutInteractionActive = false {
         didSet {
             if !layoutInteractionActive, let result = pendingScan {
@@ -169,14 +169,14 @@ final class LaunchpadModel: ObservableObject {
     /// Явный импорт по запросу пользователя (перезаписывает текущую раскладку).
     @discardableResult
     func importFromSystemLaunchpad() -> Bool {
-        let before = snapshot("Импорт раскладки")
+        let before = snapshot(L("Импорт раскладки"))
         defer { recordChange(before) }
         guard let db = LaunchpadImporter.defaultDatabaseURL() else {
-            statusMessage = "База старого Launchpad не найдена в ~/Library/Application Support/Dock/."
+            statusMessage = L("База старого Launchpad не найдена в ~/Library/Application Support/Dock/.")
             return false
         }
         guard let layout = LaunchpadImporter.importLayout(dbURL: db, installed: allApps) else {
-            statusMessage = "База старого Launchpad найдена, но прочитать из неё раскладку не удалось."
+            statusMessage = L("База старого Launchpad найдена, но прочитать из неё раскладку не удалось.")
             return false
         }
         // backupLayout сам сообщает причину отказа.
@@ -184,13 +184,13 @@ final class LaunchpadModel: ObservableObject {
         pages = reconcile(layout)
         clampCurrentPage()
         save()
-        statusMessage = "Раскладка старого Launchpad импортирована."
+        statusMessage = L("Раскладка старого Launchpad импортирована.")
         return true
     }
 
     /// Сбрасывает раскладку в алфавитную по умолчанию.
     func resetLayout() {
-        let before = snapshot("Сброс раскладки")
+        let before = snapshot(L("Сброс раскладки"))
         defer { recordChange(before) }
         statusMessage = nil
         guard backupLayout() else { return }
@@ -214,19 +214,19 @@ final class LaunchpadModel: ObservableObject {
             let values = try url.resourceValues(forKeys: [.fileSizeKey])
             guard (values.fileSize ?? 0) <= 10 * 1024 * 1024 else {
                 throw NSError(domain: "Launchpad.LayoutImport", code: 1,
-                              userInfo: [NSLocalizedDescriptionKey: "файл раскладки больше 10 МБ"])
+                              userInfo: [NSLocalizedDescriptionKey: L("файл раскладки больше 10 МБ")])
             }
             let layout = try JSONDecoder().decode(Layout.self, from: Data(contentsOf: url))
-            let before = snapshot("Импорт из файла")
+            let before = snapshot(L("Импорт из файла"))
             guard backupLayout() else { return false }
             pages = reconcile(layout)
             currentPage = 0
             save()
             recordChange(before)
-            statusMessage = "Раскладка импортирована из файла."
+            statusMessage = L("Раскладка импортирована из файла.")
             return true
         } catch {
-            statusMessage = "Не удалось импортировать раскладку: " + error.localizedDescription
+            statusMessage = L("Не удалось импортировать раскладку: %@", error.localizedDescription)
             return false
         }
     }
@@ -242,7 +242,7 @@ final class LaunchpadModel: ObservableObject {
         clearHistory()
         clampCurrentPage()
         save()
-        statusMessage = "«\(app.name)» скрыто. Вернуть приложение можно в настройках."
+        statusMessage = L("«%@» скрыто. Вернуть приложение можно в настройках.", app.name)
     }
 
     func unhideApp(_ app: AppEntry) {
@@ -252,7 +252,7 @@ final class LaunchpadModel: ObservableObject {
         pages = reconcile(Layout(pages: pages))
         clearHistory()
         save()
-        statusMessage = "«\(app.name)» снова отображается."
+        statusMessage = L("«%@» снова отображается.", app.name)
     }
 
     private func applyVisibilityFilter() {
@@ -372,7 +372,7 @@ final class LaunchpadModel: ObservableObject {
 
     /// Перемещает элемент на позицию перед `targetID` (или в конец страницы, если target == nil).
     func move(_ sourceID: String, before targetID: String?, onPage targetPage: Int) {
-        let before = snapshot("Перемещение")
+        let before = snapshot(L("Перемещение"))
         defer { recordChange(before) }
         guard sourceID != targetID, pages.indices.contains(targetPage),
               let from = locate(sourceID) else { return }
@@ -392,7 +392,7 @@ final class LaunchpadModel: ObservableObject {
     /// Возвращает true, если объединение произошло.
     @discardableResult
     func combine(_ sourceID: String, into targetID: String) -> Bool {
-        let before = snapshot("Создание или изменение папки")
+        let before = snapshot(L("Создание или изменение папки"))
         defer { recordChange(before) }
         guard sourceID != targetID,
               let from = locate(sourceID),
@@ -435,7 +435,7 @@ final class LaunchpadModel: ObservableObject {
 
     /// Удаляет приложение из папки; если в папке осталось одно приложение — раскрывает её.
     func removeFromFolder(_ appID: String, folderID: String) {
-        let before = snapshot("Изменение папки")
+        let before = snapshot(L("Изменение папки"))
         defer { recordChange(before) }
         guard let loc = locate("folder:" + folderID),
               case .folder(var folder) = pages[loc.page].items[loc.index] else { return }
@@ -456,7 +456,7 @@ final class LaunchpadModel: ObservableObject {
 
     /// Извлекает приложение из папки и кладёт его на страницу рядом с папкой.
     func extractApp(_ appID: String, fromFolder folderID: String) {
-        let before = snapshot("Извлечение из папки")
+        let before = snapshot(L("Извлечение из папки"))
         defer { recordChange(before) }
         guard let loc = locate("folder:" + folderID),
               case .folder(var folder) = pages[loc.page].items[loc.index],
@@ -487,7 +487,7 @@ final class LaunchpadModel: ObservableObject {
 
     /// Меняет порядок приложений внутри папки.
     func moveInFolder(_ folderID: String, appID: String, toIndex index: Int) {
-        let before = snapshot("Перемещение в папке")
+        let before = snapshot(L("Перемещение в папке"))
         defer { recordChange(before) }
         guard let loc = locate("folder:" + folderID),
               case .folder(var folder) = pages[loc.page].items[loc.index],
@@ -500,7 +500,7 @@ final class LaunchpadModel: ObservableObject {
     }
 
     func renameFolder(_ folderID: String, to name: String) {
-        let before = snapshot("Переименование папки")
+        let before = snapshot(L("Переименование папки"))
         defer { recordChange(before) }
         guard let loc = locate("folder:" + folderID),
               case .folder(var folder) = pages[loc.page].items[loc.index] else { return }
@@ -526,34 +526,34 @@ final class LaunchpadModel: ObservableObject {
     nonisolated static func suggestedFolderName(for apps: [AppEntry]) -> String {
         let categories = apps.compactMap(\.category)
         let common = Set(categories).count == 1 && categories.count == apps.count ? categories.first : nil
-        guard let category = common ?? apps.first?.category else { return "Папка" }
-        return folderName(forCategory: category) ?? "Папка"
+        guard let category = common ?? apps.first?.category else { return L("Папка") }
+        return folderName(forCategory: category) ?? L("Папка")
     }
 
     nonisolated static func folderName(forCategory category: String) -> String? {
         let key = category.lowercased().replacingOccurrences(of: "public.app-category.", with: "")
-        if key == "games" || key.hasSuffix("-games") { return "Игры" }
+        if key == "games" || key.hasSuffix("-games") { return L("Игры") }
         let names: [String: String] = [
-            "business": "Бизнес",
-            "developer-tools": "Разработка",
-            "education": "Образование",
-            "entertainment": "Развлечения",
-            "finance": "Финансы",
-            "graphics-design": "Графика и дизайн",
-            "healthcare-fitness": "Здоровье",
-            "lifestyle": "Образ жизни",
-            "medical": "Медицина",
-            "music": "Музыка",
-            "news": "Новости",
-            "photography": "Фото",
-            "productivity": "Продуктивность",
-            "reference": "Справочники",
-            "social-networking": "Общение",
-            "sports": "Спорт",
-            "travel": "Путешествия",
-            "utilities": "Утилиты",
-            "video": "Видео",
-            "weather": "Погода",
+            "business": L("Бизнес"),
+            "developer-tools": L("Разработка"),
+            "education": L("Образование"),
+            "entertainment": L("Развлечения"),
+            "finance": L("Финансы"),
+            "graphics-design": L("Графика и дизайн"),
+            "healthcare-fitness": L("Здоровье"),
+            "lifestyle": L("Образ жизни"),
+            "medical": L("Медицина"),
+            "music": L("Музыка"),
+            "news": L("Новости"),
+            "photography": L("Фото"),
+            "productivity": L("Продуктивность"),
+            "reference": L("Справочники"),
+            "social-networking": L("Общение"),
+            "sports": L("Спорт"),
+            "travel": L("Путешествия"),
+            "utilities": L("Утилиты"),
+            "video": L("Видео"),
+            "weather": L("Погода"),
         ]
         return names[key]
     }
@@ -696,7 +696,7 @@ final class LaunchpadModel: ObservableObject {
     func moveSelectedGridItem(horizontal: Int = 0, vertical: Int = 0) -> Bool {
         guard let selectedGridItemID, let from = locate(selectedGridItemID),
               from.page == currentPage else { return false }
-        let before = snapshot("Перемещение с клавиатуры")
+        let before = snapshot(L("Перемещение с клавиатуры"))
         let offset = horizontal != 0 ? horizontal : vertical * columns
         let targetIndex = from.index + offset
 
@@ -794,7 +794,7 @@ final class LaunchpadModel: ObservableObject {
     /// Переносит элемент в конец указанной страницы. Если индекс за пределами —
     /// создаёт новую страницу.
     func moveItem(_ sourceID: String, toPage index: Int) {
-        let before = snapshot("Перемещение")
+        let before = snapshot(L("Перемещение"))
         defer { recordChange(before) }
         guard index >= 0, let from = locate(sourceID) else { return }
         let item = pages[from.page].items.remove(at: from.index)
@@ -834,7 +834,7 @@ final class LaunchpadModel: ObservableObject {
             if nsError.domain == NSCocoaErrorDomain && nsError.code == NSUserCancelledError {
                 return false
             }
-            operationError = "Не удалось переместить «\(app.name)» в Корзину: \(error.localizedDescription)"
+            operationError = L("Не удалось переместить «%@» в Корзину: %@", app.name, error.localizedDescription)
             return false
         }
         removeAppEverywhere(app.id)
@@ -881,7 +881,7 @@ final class LaunchpadModel: ObservableObject {
     /// Перемещает приложение (найденное поиском) на страницу `p` в позицию `index`,
     /// вынимая его из прежнего места (в т.ч. из папки).
     func relocateApp(_ app: AppEntry, toPage p: Int, at index: Int) {
-        let before = snapshot("Перемещение")
+        let before = snapshot(L("Перемещение"))
         defer { recordChange(before) }
         removeAppEverywhere(app.id)
         var target = p
@@ -909,7 +909,7 @@ final class LaunchpadModel: ObservableObject {
     /// `index` задаётся в пространстве «страница без перетаскиваемого элемента»
     /// (others-space), поэтому после удаления элемента вставляем прямо по нему.
     func placeItem(_ sourceID: String, onPage p: Int, at index: Int) {
-        let before = snapshot("Перемещение")
+        let before = snapshot(L("Перемещение"))
         defer { recordChange(before) }
         guard let from = locate(sourceID), p >= 0, p < pages.count else { return }
         let item = pages[from.page].items.remove(at: from.index)
@@ -1020,7 +1020,7 @@ extension LaunchpadModel {
             return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
         }
         statusMessage = result.unavailablePaths.isEmpty ? nil
-            : "Часть каталогов недоступна. Их приложения сохранены в раскладке."
+            : L("Часть каталогов недоступна. Их приложения сохранены в раскладке.")
         guard !hasLoadedLayout || apps != knownApps else { return }
         knownApps = apps
         applyVisibilityFilter()
@@ -1060,8 +1060,8 @@ extension LaunchpadModel {
     private func updateHistoryState() {
         canUndo = !undoStack.isEmpty
         canRedo = !redoStack.isEmpty
-        undoTitle = undoStack.last.map { "Отменить: " + $0.name } ?? "Отменить"
-        redoTitle = redoStack.last.map { "Повторить: " + $0.name } ?? "Повторить"
+        undoTitle = undoStack.last.map { L("Отменить: %@", $0.name) } ?? L("Отменить")
+        redoTitle = redoStack.last.map { L("Повторить: %@", $0.name) } ?? L("Повторить")
     }
 
     private func clearHistory() {
@@ -1097,7 +1097,7 @@ extension LaunchpadModel {
             try layoutStore.backup(Layout(pages: normalize(pages)))
             return true
         } catch {
-            statusMessage = "Не удалось создать резервную копию раскладки: " + error.localizedDescription
+            statusMessage = L("Не удалось создать резервную копию раскладки: %@", error.localizedDescription)
             return false
         }
     }
@@ -1106,19 +1106,19 @@ extension LaunchpadModel {
     func restoreLatestBackup() -> Bool {
         do {
             guard let layout = try layoutStore.latestBackup() else {
-                statusMessage = "Резервных копий пока нет."
+                statusMessage = L("Резервных копий пока нет.")
                 return false
             }
-            let before = snapshot("Восстановление раскладки")
+            let before = snapshot(L("Восстановление раскладки"))
             guard backupLayout() else { return false }
             pages = reconcile(layout)
             currentPage = 0
             save()
             recordChange(before)
-            statusMessage = "Раскладка восстановлена."
+            statusMessage = L("Раскладка восстановлена.")
             return true
         } catch {
-            statusMessage = "Не удалось восстановить раскладку: " + error.localizedDescription
+            statusMessage = L("Не удалось восстановить раскладку: %@", error.localizedDescription)
             return false
         }
     }

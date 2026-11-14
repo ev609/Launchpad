@@ -1,0 +1,253 @@
+/* App/AppDelegate.swift */
+"Открыть Launchpad" = "Open Launchpad";
+"Импортировать раскладку старого Launchpad" = "Import Old Launchpad Layout";
+"Сбросить раскладку (по алфавиту)" = "Reset Layout (Alphabetical)";
+"Обновить список приложений" = "Refresh App List";
+"Запускать при входе" = "Launch at Login";
+"Держать запущенным (авто-перезапуск)" = "Keep Running (Auto-Restart)";
+"Проверить обновления…" = "Check for Updates…";
+"Обновления ещё не проверялись" = "Updates not checked yet";
+"Обновлять автоматически" = "Update Automatically";
+"Сочетания клавиш…" = "Keyboard Shortcuts…";
+"Настройки…" = "Settings…";
+"Выход" = "Quit";
+"Выйти из Launchpad" = "Quit Launchpad";
+"Правка" = "Edit";
+"Отменить" = "Undo";
+"Повторить" = "Redo";
+"Вырезать" = "Cut";
+"Копировать" = "Copy";
+"Вставить" = "Paste";
+"Выбрать всё" = "Select All";
+"Справка" = "Help";
+"Сочетания клавиш Launchpad" = "Launchpad Keyboard Shortcuts";
+"Не удалось назначить «%@». Возможно, сочетание занято. Выберите другое в настройках." = "Couldn’t assign “%@”. The shortcut may already be in use. Choose another one in Settings.";
+"Извлечено из папки" = "Removed from folder";
+"Перемещено" = "Moved";
+"Папка создана" = "Folder created";
+"%@, страница %@ из %@" = "%1$@, page %2$@ of %3$@";
+"Раскладка импортирована" = "Layout Imported";
+"Страницы и папки старого Launchpad восстановлены." = "Pages and folders from the old Launchpad have been restored.";
+"Не удалось импортировать" = "Import Failed";
+"Неизвестная ошибка импорта." = "Unknown import error.";
+"Настройки Launchpad" = "Launchpad Settings";
+"Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа»." = "The system didn’t allow changing the login item. Check “System Settings → General → Login Items”.";
+"Не удалось изменить автозапуск" = "Couldn’t Change Launch at Login";
+"Не все параметры фонового запуска удалось применить. Их можно изменить в настройках." = "Not all background launch options could be applied. You can change them in Settings.";
+"Добро пожаловать в Launchpad" = "Welcome to Launchpad";
+"Проверка обновлений…" = "Checking for updates…";
+"Ошибка проверки: %@" = "Check failed: %@";
+"Не удалось проверить обновления" = "Couldn’t Check for Updates";
+"Доступна версия %@" = "Version %@ is available";
+"Установлена последняя версия" = "You’re up to date";
+"Обновлений нет" = "No Updates Available";
+"Установлена последняя версия %@." = "You’re running the latest version, %@.";
+"Проверено: обновлений нет" = "Checked: no updates available";
+"Обновить до %@…" = "Update to %@…";
+"Доступно обновление %@" = "Update %@ Available";
+"Установить сейчас? Launchpad перезапустится." = "Install now? Launchpad will restart.";
+"Обновить" = "Update";
+"Позже" = "Later";
+"Повторить обновление до %@…" = "Retry Update to %@…";
+"Отменить ввод" = "Undo Typing";
+"Повторить ввод" = "Redo Typing";
+
+/* Models/AppSettings.swift */
+"Своё сочетание" = "Custom Shortcut";
+"Без горячей клавиши" = "No Hotkey";
+
+/* Models/LaunchpadModel.swift */
+"Импорт раскладки" = "Import Layout";
+"База старого Launchpad не найдена в ~/Library/Application Support/Dock/." = "The old Launchpad database was not found in ~/Library/Application Support/Dock/.";
+"База старого Launchpad найдена, но прочитать из неё раскладку не удалось." = "The old Launchpad database was found, but its layout could not be read.";
+"Раскладка старого Launchpad импортирована." = "The old Launchpad layout has been imported.";
+"Сброс раскладки" = "Reset Layout";
+"файл раскладки больше 10 МБ" = "the layout file is larger than 10 MB";
+"Импорт из файла" = "Import from File";
+"Раскладка импортирована из файла." = "Layout imported from file.";
+"Не удалось импортировать раскладку: %@" = "Couldn’t import the layout: %@";
+"«%@» скрыто. Вернуть приложение можно в настройках." = "“%@” is hidden. You can bring the app back in Settings.";
+"«%@» снова отображается." = "“%@” is visible again.";
+"Перемещение" = "Move";
+"Создание или изменение папки" = "Create or Change Folder";
+"Изменение папки" = "Change Folder";
+"Извлечение из папки" = "Remove from Folder";
+"Перемещение в папке" = "Move in Folder";
+"Переименование папки" = "Rename Folder";
+"Папка" = "Folder";
+"Игры" = "Games";
+"Бизнес" = "Business";
+"Разработка" = "Developer Tools";
+"Образование" = "Education";
+"Развлечения" = "Entertainment";
+"Финансы" = "Finance";
+"Графика и дизайн" = "Graphics & Design";
+"Здоровье" = "Health & Fitness";
+"Образ жизни" = "Lifestyle";
+"Медицина" = "Medical";
+"Музыка" = "Music";
+"Новости" = "News";
+"Фото" = "Photo";
+"Продуктивность" = "Productivity";
+"Справочники" = "Reference";
+"Общение" = "Social Networking";
+"Спорт" = "Sports";
+"Путешествия" = "Travel";
+"Утилиты" = "Utilities";
+"Видео" = "Video";
+"Погода" = "Weather";
+"Перемещение с клавиатуры" = "Move with Keyboard";
+"Не удалось переместить «%@» в Корзину: %@" = "Couldn’t move “%1$@” to the Trash: %2$@";
+"Часть каталогов недоступна. Их приложения сохранены в раскладке." = "Some folders are unavailable. Their apps are kept in the layout.";
+"Отменить: %@" = "Undo %@";
+"Повторить: %@" = "Redo %@";
+"Не удалось создать резервную копию раскладки: %@" = "Couldn’t back up the layout: %@";
+"Резервных копий пока нет." = "There are no backups yet.";
+"Восстановление раскладки" = "Restore Layout";
+"Раскладка восстановлена." = "Layout restored.";
+"Не удалось восстановить раскладку: %@" = "Couldn’t restore the layout: %@";
+
+/* Services/AppTrashService.swift */
+"Разрешите Launchpad управлять Finder в «Системные настройки → Конфиденциальность и безопасность → Автоматизация», затем повторите удаление." = "Allow Launchpad to control Finder in “System Settings → Privacy & Security → Automation”, then try deleting again.";
+
+/* Services/InstallLocation.swift */
+"Launchpad запущен не из приложения .app (сборка для разработки)." = "Launchpad is not running from an .app bundle (development build).";
+"Launchpad запущен с образа диска или из карантина. Перетащите его в папку «Программы» и запустите оттуда." = "Launchpad is running from a disk image or quarantine. Drag it to the Applications folder and launch it from there.";
+"Нет прав на запись в папку с Launchpad, поэтому обновление не установить. Переместите приложение в «Программы» под своей учётной записью." = "You don’t have write permission for the folder containing Launchpad, so the update can’t be installed. Move the app to Applications using your own user account.";
+
+/* Services/Services.swift */
+"Не удалось открыть «%@»: %@" = "Couldn’t open “%1$@”: %2$@";
+"Не удалось сохранить раскладку: %@" = "Couldn’t save the layout: %@";
+
+/* Services/Updater.swift */
+"Ошибка: %@" = "Error: %@";
+"некорректный ответ сервера" = "invalid server response";
+"архив обновления слишком большой" = "the update archive is too large";
+"подпись обновления не прошла проверку" = "the update signature failed verification";
+"не удалось распаковать обновление" = "couldn’t extract the update";
+"в архиве нет корректного Launchpad.app" = "the archive doesn’t contain a valid Launchpad.app";
+"версия в архиве не совпадает с релизом" = "the version in the archive doesn’t match the release";
+"подпись приложения повреждена" = "the app signature is damaged";
+"дата неизвестна" = "date unknown";
+"Загрузка…" = "Downloading…";
+"Проверка подписи…" = "Verifying signature…";
+"Установка…" = "Installing…";
+
+/* Utils/PerformanceTrace.swift */
+"ещё нет данных" = "no data yet";
+"%.1f мс" = "%.1f ms";
+
+/* Views/Components.swift */
+"Поиск" = "Search";
+"Поиск приложений" = "Search Apps";
+
+/* Views/FolderOverlay.swift */
+"Имя папки" = "Folder Name";
+"Нажмите, чтобы переименовать папку" = "Click to rename the folder";
+"Удалить «%@»" = "Delete “%@”";
+"Извлечь из папки" = "Remove from Folder";
+"Скрыть из Launchpad" = "Hide from Launchpad";
+"Показать в Finder" = "Show in Finder";
+"Выбрано" = "Selected";
+"Нажмите Return, чтобы открыть приложение" = "Press Return to open the app";
+"Переместить влево" = "Move Left";
+"Переместить вправо" = "Move Right";
+"Переместить вверх" = "Move Up";
+"Переместить вниз" = "Move Down";
+
+/* Views/KeyboardShortcutHelpView.swift */
+"⌥ + стрелки" = "⌥ + arrows";
+"Выбрать приложение" = "Select an app";
+"Следующее / предыдущее" = "Next / previous";
+"Начало / конец страницы" = "Start / end of page";
+"Перейти на другую страницу" = "Go to another page";
+"Открыть выбранное" = "Open the selection";
+"Назад или закрыть Launchpad" = "Go back or close Launchpad";
+"Переставить выбранное" = "Move the selection";
+"Объединить с соседом" = "Combine with a neighbor";
+"Извлечь приложение из папки" = "Remove an app from a folder";
+"Отменить изменение" = "Undo a change";
+"Повторить изменение" = "Redo a change";
+"Показать эту памятку" = "Show this cheat sheet";
+"Сочетания клавиш" = "Keyboard Shortcuts";
+"Launchpad можно полностью использовать без мыши" = "Launchpad can be used entirely without a mouse";
+"Закрыть справку" = "Close Help";
+"Навигация" = "Navigation";
+"Раскладка" = "Layout";
+"Во время поиска стрелки и Tab выбирают результат, Return запускает приложение." = "While searching, the arrow keys and Tab select a result, and Return launches the app.";
+"Справка по сочетаниям клавиш Launchpad" = "Launchpad Keyboard Shortcuts Help";
+
+/* Views/LaunchpadRootView.swift */
+"Не удалось выполнить действие" = "Couldn’t Complete the Action";
+"Удалить «%@»?" = "Delete “%@”?";
+"Переместить в Корзину" = "Move to Trash";
+"Отмена" = "Cancel";
+"«%@» будет перемещено в Корзину." = "“%@” will be moved to the Trash.";
+"Страница %@" = "Page %@";
+"Ничего не найдено" = "No Results";
+"Попробуйте другое название или сокращение." = "Try a different name or abbreviation.";
+
+/* Views/OnboardingView.swift */
+"Launchpad снова на месте" = "Launchpad Is Back";
+"Настройте быстрый запуск — всё можно изменить позже." = "Set up quick launch — you can change everything later.";
+"Как открыть" = "How to Open";
+"Нажмите F4 или используйте значок в строке меню." = "Press F4 or use the icon in the menu bar.";
+"Для жеста щипка разрешите «Мониторинг ввода» в системных настройках." = "For the pinch gesture, allow “Input Monitoring” in System Settings.";
+"Фоновая работа" = "Background Operation";
+"Запускать при входе в систему" = "Launch at Login";
+"Перезапускать после сбоя" = "Restart After a Crash";
+"Автоматически устанавливать обновления" = "Install Updates Automatically";
+"Импортировать страницы и папки старого Launchpad" = "Import Pages and Folders from the Old Launchpad";
+"Настроить позже" = "Set Up Later";
+"Начать работу" = "Get Started";
+
+/* Views/PageView.swift */
+"Объединить с предыдущим" = "Combine with Previous";
+"Объединить со следующим" = "Combine with Next";
+"Нажмите Return, чтобы открыть папку" = "Press Return to open the folder";
+
+/* Views/SettingsView.swift */
+"Сетка" = "Grid";
+"Колонок: %@" = "Columns: %@";
+"Строк: %@" = "Rows: %@";
+"Всего иконок на странице: %@" = "Total icons per page: %@";
+"Горячая клавиша" = "Hotkey";
+"Жест" = "Gesture";
+"Открывать и закрывать щипком трекпада" = "Open and close with a trackpad pinch";
+"Сведение 3–5 пальцев открывает Launchpad, разведение — закрывает. Использует закрытый системный фреймворк трекпада." = "Pinching 3–5 fingers together opens Launchpad; spreading them closes it. Uses a private system trackpad framework.";
+"Автозапуск" = "Launch at Login";
+"Перезапуск при крахе/принудительном завершении и старт при входе. Осознанный «Выйти» уважается. При включении Launchpad один раз перезапустится под управлением системы." = "Restarts after a crash or force quit and starts at login. A deliberate “Quit” is respected. When enabled, Launchpad will restart once under the system’s control.";
+"Сбросить (по алфавиту)" = "Reset (Alphabetical)";
+"Раскладка сброшена." = "Layout reset.";
+"Список приложений обновлён." = "App list refreshed.";
+"Восстановить последнюю резервную копию" = "Restore Latest Backup";
+"Экспортировать в файл…" = "Export to File…";
+"Импортировать из файла…" = "Import from File…";
+"Обновление списка…" = "Refreshing list…";
+"Каталоги приложений" = "App Folders";
+"Убрать каталог" = "Remove Folder";
+"Добавить каталог…" = "Add Folder…";
+"Вложенные .app автоматически появятся в Launchpad; изменения каталога отслеживаются через FSEvents." = "Nested .app bundles appear in Launchpad automatically; changes to the folder are tracked through FSEvents.";
+"Скрытые приложения" = "Hidden Apps";
+"Показать" = "Show";
+"О приложении" = "About";
+"Версия релиза" = "Release Version";
+"Номер сборки" = "Build Number";
+"Дата и время сборки" = "Build Date and Time";
+"Производительность" = "Performance";
+"Последнее открытие" = "Last Open";
+"Последний свайп" = "Last Swipe";
+"Последнее сканирование" = "Last Scan";
+"Задержки в последнем свайпе" = "Stalls in Last Swipe";
+"Облегчённый режим включался" = "Lightweight Mode Activated";
+"%@ раз" = "%@ times";
+"Скопировать диагностический отчёт" = "Copy Diagnostic Report";
+"Отчёт скопирован." = "Report copied.";
+"Раскладка экспортирована." = "Layout exported.";
+"Не удалось экспортировать раскладку: %@" = "Couldn’t export the layout: %@";
+"Добавить" = "Add";
+"Каталог добавлен." = "Folder added.";
+"Этот каталог уже добавлен." = "This folder has already been added.";
+"Записать своё сочетание…" = "Record Custom Shortcut…";
+"Нажмите сочетание (Esc — отмена)" = "Press a shortcut (Esc to cancel)";
+"Добавьте ⌘, ⌥ или ⌃ (без них можно только F1–F20)." = "Add ⌘, ⌥ or ⌃ (without them only F1–F20 are allowed).";

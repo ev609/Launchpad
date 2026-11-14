@@ -218,7 +218,7 @@ struct PageView: View {
                 if case .app(let app) = item {
                     Button("Скрыть из Launchpad") { model.hideApp(app) }
                     if model.canDelete(app) {
-                        Button("Удалить «\(app.name)»", role: .destructive) {
+                        Button(L("Удалить «%@»", app.name), role: .destructive) {
                             model.pendingDelete = app
                         }
                     }
@@ -240,7 +240,7 @@ struct PageView: View {
                     }
                     .buttonStyle(.plain)
                     .offset(x: -metrics.iconSize * 0.46, y: -metrics.iconSize * 0.09)
-                    .help("Удалить «\(app.name)»")
+                    .help(L("Удалить «%@»", app.name))
                 }
             }
             .accessibilityElement(children: .ignore)
@@ -263,7 +263,7 @@ struct PageView: View {
                     }
                     Button("Скрыть из Launchpad") { model.hideApp(app) }
                     if model.canDelete(app) {
-                        Button("Удалить «\(app.name)»") { model.pendingDelete = app }
+                        Button(L("Удалить «%@»", app.name)) { model.pendingDelete = app }
                     }
                 }
             }
@@ -302,9 +302,9 @@ struct PageView: View {
     private func accessibilityHint(for item: LaunchpadItem) -> String {
         switch item {
         case .app:
-            return "Нажмите Return, чтобы открыть приложение"
+            return L("Нажмите Return, чтобы открыть приложение")
         case .folder:
-            return "Нажмите Return, чтобы открыть папку"
+            return L("Нажмите Return, чтобы открыть папку")
         }
     }
 

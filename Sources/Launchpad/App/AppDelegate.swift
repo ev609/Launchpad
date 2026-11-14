@@ -173,47 +173,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         versionItem.isEnabled = false
         menu.addItem(versionItem)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Открыть Launchpad", action: #selector(showLaunchpad), keyEquivalent: "")
+        menu.addItem(withTitle: L("Открыть Launchpad"), action: #selector(showLaunchpad), keyEquivalent: "")
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Импортировать раскладку старого Launchpad",
+        menu.addItem(withTitle: L("Импортировать раскладку старого Launchpad"),
                      action: #selector(importLayout), keyEquivalent: "")
-        menu.addItem(withTitle: "Сбросить раскладку (по алфавиту)",
+        menu.addItem(withTitle: L("Сбросить раскладку (по алфавиту)"),
                      action: #selector(resetLayout), keyEquivalent: "")
-        menu.addItem(withTitle: "Обновить список приложений",
+        menu.addItem(withTitle: L("Обновить список приложений"),
                      action: #selector(rescan), keyEquivalent: "")
         menu.addItem(.separator())
-        let loginItem = NSMenuItem(title: "Запускать при входе",
+        let loginItem = NSMenuItem(title: L("Запускать при входе"),
                                    action: #selector(toggleLoginItem), keyEquivalent: "")
         loginItem.state = StartupManager.launchesAtLogin ? .on : .off
         loginItemMenuItem = loginItem
         menu.addItem(loginItem)
 
-        let keepAlive = NSMenuItem(title: "Держать запущенным (авто-перезапуск)",
+        let keepAlive = NSMenuItem(title: L("Держать запущенным (авто-перезапуск)"),
                                    action: #selector(toggleKeepAlive), keyEquivalent: "")
         keepAlive.state = StartupManager.keepsAlive ? .on : .off
         keepAliveMenuItem = keepAlive
         menu.addItem(keepAlive)
 
         menu.addItem(.separator())
-        let update = NSMenuItem(title: "Проверить обновления…",
+        let update = NSMenuItem(title: L("Проверить обновления…"),
                                 action: #selector(checkUpdatesClicked), keyEquivalent: "")
         updateMenuItem = update
         menu.addItem(update)
-        let updateStatus = NSMenuItem(title: "Обновления ещё не проверялись",
+        let updateStatus = NSMenuItem(title: L("Обновления ещё не проверялись"),
                                       action: nil, keyEquivalent: "")
         updateStatus.isEnabled = false
         updateStatusMenuItem = updateStatus
         menu.addItem(updateStatus)
-        let autoUpdate = NSMenuItem(title: "Обновлять автоматически",
+        let autoUpdate = NSMenuItem(title: L("Обновлять автоматически"),
                                     action: #selector(toggleAutoUpdate), keyEquivalent: "")
         autoUpdate.state = AppSettings.shared.autoUpdate ? .on : .off
         autoUpdateMenuItem = autoUpdate
         menu.addItem(autoUpdate)
         menu.addItem(.separator())
-        menu.addItem(withTitle: "Сочетания клавиш…",
+        menu.addItem(withTitle: L("Сочетания клавиш…"),
                      action: #selector(openKeyboardHelp), keyEquivalent: "?")
-        menu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",")
-        menu.addItem(withTitle: "Выход", action: #selector(quit), keyEquivalent: "q")
+        menu.addItem(withTitle: L("Настройки…"), action: #selector(openSettings), keyEquivalent: ",")
+        menu.addItem(withTitle: L("Выход"), action: #selector(quit), keyEquivalent: "q")
         for item in menu.items { item.target = self }
         menu.delegate = self
         statusItem.menu = menu
@@ -223,27 +223,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let appItem = NSMenuItem(title: "Launchpad", action: nil, keyEquivalent: "")
         let appMenu = NSMenu(title: "Launchpad")
-        appMenu.addItem(withTitle: "Настройки…", action: #selector(openSettings), keyEquivalent: ",").target = self
-        appMenu.addItem(withTitle: "Выйти из Launchpad", action: #selector(quit), keyEquivalent: "q").target = self
+        appMenu.addItem(withTitle: L("Настройки…"), action: #selector(openSettings), keyEquivalent: ",").target = self
+        appMenu.addItem(withTitle: L("Выйти из Launchpad"), action: #selector(quit), keyEquivalent: "q").target = self
         appItem.submenu = appMenu
         menu.addItem(appItem)
-        let item = NSMenuItem(title: "Правка", action: nil, keyEquivalent: "")
-        let edit = NSMenu(title: "Правка")
+        let item = NSMenuItem(title: L("Правка"), action: nil, keyEquivalent: "")
+        let edit = NSMenu(title: L("Правка"))
         edit.delegate = self
-        edit.addItem(withTitle: "Отменить", action: #selector(undoLayout), keyEquivalent: "z").target = self
-        let redo = edit.addItem(withTitle: "Повторить", action: #selector(redoLayout), keyEquivalent: "z")
+        edit.addItem(withTitle: L("Отменить"), action: #selector(undoLayout), keyEquivalent: "z").target = self
+        let redo = edit.addItem(withTitle: L("Повторить"), action: #selector(redoLayout), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         redo.target = self
         edit.addItem(.separator())
-        for (title, action, key) in [("Вырезать", "cut:", "x"), ("Копировать", "copy:", "c"),
-                                      ("Вставить", "paste:", "v"), ("Выбрать всё", "selectAll:", "a")] {
+        for (title, action, key) in [(L("Вырезать"), "cut:", "x"), (L("Копировать"), "copy:", "c"),
+                                      (L("Вставить"), "paste:", "v"), (L("Выбрать всё"), "selectAll:", "a")] {
             edit.addItem(withTitle: title, action: Selector(action), keyEquivalent: key)
         }
         item.submenu = edit
         menu.addItem(item)
-        let helpItem = NSMenuItem(title: "Справка", action: nil, keyEquivalent: "")
-        let help = NSMenu(title: "Справка")
-        let shortcuts = help.addItem(withTitle: "Сочетания клавиш Launchpad",
+        let helpItem = NSMenuItem(title: L("Справка"), action: nil, keyEquivalent: "")
+        let help = NSMenu(title: L("Справка"))
+        let shortcuts = help.addItem(withTitle: L("Сочетания клавиш Launchpad"),
                                      action: #selector(openKeyboardHelp), keyEquivalent: "/")
         shortcuts.keyEquivalentModifierMask = [.command, .shift]
         shortcuts.target = self
@@ -275,7 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                  callback: { [weak self] in self?.toggle() }) {
             hotKeys.append(hk)
         } else {
-            model.hotkeyError = "Не удалось назначить «\(hotkey.title)». Возможно, сочетание занято. Выберите другое в настройках."
+            model.hotkeyError = L("Не удалось назначить «%@». Возможно, сочетание занято. Выберите другое в настройках.", hotkey.title)
         }
     }
 
@@ -519,7 +519,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
            event.keyCode != UInt16(kVK_Escape) { return event }
         if model.openFolderID != nil, shortcutModifiers == [.command, .option],
            event.keyCode == UInt16(kVK_UpArrow) {
-            if model.extractSelectedFolderApp() { announce("Извлечено из папки") }
+            if model.extractSelectedFolderApp() { announce(L("Извлечено из папки")) }
             return nil
         }
         if model.openFolderID != nil, shortcutModifiers == .option {
@@ -536,7 +536,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             default:
                 return event
             }
-            if moved { announce("Перемещено") }
+            if moved { announce(L("Перемещено")) }
             return nil
         }
         if model.openFolderID == nil, !model.isSearching,
@@ -550,7 +550,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             default:
                 return event
             }
-            if combined { announce("Папка создана") }
+            if combined { announce(L("Папка создана")) }
             return nil
         }
         if model.openFolderID == nil, !model.isSearching, shortcutModifiers == .option {
@@ -567,7 +567,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             default:
                 return event
             }
-            if moved { announce("Перемещено") }
+            if moved { announce(L("Перемещено")) }
             return nil
         }
         if model.openFolderID != nil, event.keyCode == UInt16(kVK_Tab),
@@ -708,7 +708,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let app = model.selectedFolderApp {
             text = app.name
         } else if let item = model.selectedGridItem {
-            text = "\(item.displayName), страница \(model.currentPage + 1) из \(model.pages.count)"
+            text = L("%@, страница %@ из %@", item.displayName, String(model.currentPage + 1), String(model.pages.count))
         } else {
             text = nil
         }
@@ -871,11 +871,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let ok = model.importFromSystemLaunchpad()
         let alert = NSAlert()
         if ok {
-            alert.messageText = "Раскладка импортирована"
-            alert.informativeText = "Страницы и папки старого Launchpad восстановлены."
+            alert.messageText = L("Раскладка импортирована")
+            alert.informativeText = L("Страницы и папки старого Launchpad восстановлены.")
         } else {
-            alert.messageText = "Не удалось импортировать"
-            alert.informativeText = model.statusMessage ?? "Неизвестная ошибка импорта."
+            alert.messageText = L("Не удалось импортировать")
+            alert.informativeText = model.statusMessage ?? L("Неизвестная ошибка импорта.")
         }
         alert.runModal()
     }
@@ -900,7 +900,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 460, height: 620),
                              styleMask: [.titled, .closable],
                              backing: .buffered, defer: false)
-            w.title = "Настройки Launchpad"
+            w.title = L("Настройки Launchpad")
             w.isReleasedWhenClosed = false
             w.center()
             w.contentView = NSHostingView(rootView: SettingsView(model: model))
@@ -923,14 +923,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let problem = InstallLocation.autostartProblem {
             showStartupAlert(problem.message)
         } else if !change() {
-            showStartupAlert("Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа».")
+            showStartupAlert(L("Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа»."))
         }
         updateStartupMenuState()
     }
 
     private func showStartupAlert(_ text: String) {
         let alert = NSAlert()
-        alert.messageText = "Не удалось изменить автозапуск"
+        alert.messageText = L("Не удалось изменить автозапуск")
         alert.informativeText = text
         alert.runModal()
     }
@@ -1017,7 +1017,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.scheduledUpdateCheck()
                 if !startupOK {
                     self.model.operationError = locationProblem?.message
-                        ?? "Не все параметры фонового запуска удалось применить. Их можно изменить в настройках."
+                        ?? L("Не все параметры фонового запуска удалось применить. Их можно изменить в настройках.")
                     self.openSettings()
                 } else {
                     self.show()
@@ -1031,7 +1031,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             })
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 560, height: 590),
                               styleMask: [.titled, .closable], backing: .buffered, defer: false)
-        window.title = "Добро пожаловать в Launchpad"
+        window.title = L("Добро пожаловать в Launchpad")
         window.isReleasedWhenClosed = false
         window.contentView = NSHostingView(rootView: view)
         window.center()
@@ -1048,24 +1048,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             promptInstall(update)
             return
         }
-        setUpdateStatus("Проверка обновлений…")
+        setUpdateStatus(L("Проверка обновлений…"))
         Updater.checkForUpdate { [weak self] result in
             MainActor.assumeIsolated {
                 if case .failure(let error) = result {
-                    self?.setUpdateStatus("Ошибка проверки: \(error.localizedDescription)")
+                    self?.setUpdateStatus(L("Ошибка проверки: %@", error.localizedDescription))
                     let alert = NSAlert()
-                    alert.messageText = "Не удалось проверить обновления"
+                    alert.messageText = L("Не удалось проверить обновления")
                     alert.informativeText = error.localizedDescription
                     alert.runModal()
                 } else if case .success(let update?) = result {
                     self?.pendingUpdate = update
-                    self?.setUpdateStatus("Доступна версия \(update.version)")
+                    self?.setUpdateStatus(L("Доступна версия %@", update.version))
                     self?.promptInstall(update)
                 } else {
-                    self?.setUpdateStatus("Установлена последняя версия")
+                    self?.setUpdateStatus(L("Установлена последняя версия"))
                     let alert = NSAlert()
-                    alert.messageText = "Обновлений нет"
-                    alert.informativeText = "Установлена последняя версия \(Updater.currentVersion)."
+                    alert.messageText = L("Обновлений нет")
+                    alert.informativeText = L("Установлена последняя версия %@.", Updater.currentVersion)
                     alert.runModal()
                 }
             }
@@ -1084,13 +1084,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 switch result {
                 case .failure(let error):
-                    self.setUpdateStatus("Ошибка проверки: \(error.localizedDescription)")
+                    self.setUpdateStatus(L("Ошибка проверки: %@", error.localizedDescription))
                 case .success(nil):
-                    self.setUpdateStatus("Проверено: обновлений нет")
+                    self.setUpdateStatus(L("Проверено: обновлений нет"))
                 case .success(let update?):
                     self.pendingUpdate = update
-                    self.updateMenuItem?.title = "Обновить до \(update.version)…"
-                    self.setUpdateStatus("Доступна версия \(update.version)")
+                    self.updateMenuItem?.title = L("Обновить до %@…", update.version)
+                    self.setUpdateStatus(L("Доступна версия %@", update.version))
                     if AppSettings.shared.autoUpdate && self.canInstallSilently {
                         self.install(update)
                     }
@@ -1119,12 +1119,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func promptInstall(_ update: Updater.Update) {
         let alert = NSAlert()
-        alert.messageText = "Доступно обновление \(update.version)"
+        alert.messageText = L("Доступно обновление %@", update.version)
         alert.informativeText = update.notes.isEmpty
-            ? "Установить сейчас? Launchpad перезапустится."
+            ? L("Установить сейчас? Launchpad перезапустится.")
             : update.notes
-        alert.addButton(withTitle: "Обновить")
-        alert.addButton(withTitle: "Позже")
+        alert.addButton(withTitle: L("Обновить"))
+        alert.addButton(withTitle: L("Позже"))
         if alert.runModal() == .alertFirstButtonReturn {
             install(update)
         }
@@ -1141,7 +1141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if case .failed = status {
                     self.isInstallingUpdate = false
                     self.updateMenuItem?.isEnabled = true
-                    self.updateMenuItem?.title = "Повторить обновление до \(update.version)…"
+                    self.updateMenuItem?.title = L("Повторить обновление до %@…", update.version)
                 }
             }
         }
@@ -1160,11 +1160,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 extension AppDelegate: NSMenuDelegate, NSMenuItemValidation {
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         if menuItem.action == #selector(undoLayout) {
-            menuItem.title = textUndoManager == nil ? model.undoTitle : "Отменить ввод"
+            menuItem.title = textUndoManager == nil ? model.undoTitle : L("Отменить ввод")
             return textUndoManager?.canUndo ?? (model.canUndo && !model.layoutInteractionActive)
         }
         if menuItem.action == #selector(redoLayout) {
-            menuItem.title = textUndoManager == nil ? model.redoTitle : "Повторить ввод"
+            menuItem.title = textUndoManager == nil ? model.redoTitle : L("Повторить ввод")
             return textUndoManager?.canRedo ?? (model.canRedo && !model.layoutInteractionActive)
         }
         return true

@@ -57,7 +57,7 @@ enum AppTrashService {
         if message.contains("(-128)") { return CocoaError(.userCancelled) }
         if message.contains("(-1743)") {
             return NSError(domain: "Launchpad.FinderTrash", code: -1743, userInfo: [
-                NSLocalizedDescriptionKey: "Разрешите Launchpad управлять Finder в «Системные настройки → Конфиденциальность и безопасность → Автоматизация», затем повторите удаление."
+                NSLocalizedDescriptionKey: L("Разрешите Launchpad управлять Finder в «Системные настройки → Конфиденциальность и безопасность → Автоматизация», затем повторите удаление.")
             ])
         }
         return NSError(domain: "Launchpad.FinderTrash", code: 1, userInfo: [

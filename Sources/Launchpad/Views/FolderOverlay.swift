@@ -140,7 +140,7 @@ struct FolderOverlay: View {
                             }
                             .buttonStyle(.plain)
                             .offset(x: -min(88, max(58, cellWidth * 0.58)) * 0.46, y: 2)
-                            .help("Удалить «\(app.name)»")
+                            .help(L("Удалить «%@»", app.name))
                         }
                     }
                     .scaleEffect(dragging ? 1.12 : 1.0)
@@ -153,7 +153,7 @@ struct FolderOverlay: View {
                         Button("Скрыть из Launchpad") { model.hideApp(app) }
                         Button("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.path)]) }
                         if model.canDelete(app) {
-                            Button("Удалить «\(app.name)»", role: .destructive) {
+                            Button(L("Удалить «%@»", app.name), role: .destructive) {
                                 model.pendingDelete = app
                             }
                         }
@@ -208,7 +208,7 @@ struct FolderOverlay: View {
                         }
                         Button("Скрыть из Launchpad") { model.hideApp(app) }
                         if model.canDelete(app) {
-                            Button("Удалить «\(app.name)»") { model.pendingDelete = app }
+                            Button(L("Удалить «%@»", app.name)) { model.pendingDelete = app }
                         }
                     }
             }

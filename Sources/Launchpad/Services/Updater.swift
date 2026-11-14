@@ -27,7 +27,7 @@ enum Updater {
         var text: String {
             switch self {
             case .progress(let text): return text
-            case .failed(let message): return "Ошибка: \(message)"
+            case .failed(let message): return L("Ошибка: %@", message)
             }
         }
     }
@@ -45,13 +45,13 @@ enum Updater {
         var errorDescription: String? {
             switch self {
             case .badLocation(let message): return message
-            case .invalidResponse: return "некорректный ответ сервера"
-            case .archiveTooLarge: return "архив обновления слишком большой"
-            case .invalidSignature: return "подпись обновления не прошла проверку"
-            case .extractionFailed: return "не удалось распаковать обновление"
-            case .invalidBundle: return "в архиве нет корректного Launchpad.app"
-            case .wrongVersion: return "версия в архиве не совпадает с релизом"
-            case .invalidCodeSignature: return "подпись приложения повреждена"
+            case .invalidResponse: return L("некорректный ответ сервера")
+            case .archiveTooLarge: return L("архив обновления слишком большой")
+            case .invalidSignature: return L("подпись обновления не прошла проверку")
+            case .extractionFailed: return L("не удалось распаковать обновление")
+            case .invalidBundle: return L("в архиве нет корректного Launchpad.app")
+            case .wrongVersion: return L("версия в архиве не совпадает с релизом")
+            case .invalidCodeSignature: return L("подпись приложения повреждена")
             }
         }
     }
@@ -72,7 +72,7 @@ enum Updater {
     }
 
     static var buildDateText: String {
-        guard let buildDate else { return "дата неизвестна" }
+        guard let buildDate else { return L("дата неизвестна") }
         let formatter = DateFormatter()
         formatter.locale = .current
         formatter.timeZone = .current
@@ -150,7 +150,7 @@ enum Updater {
             fail(UpdateError.badLocation(problem.message), progress: progress)
             return
         }
-        progress(.progress("Загрузка…"))
+        progress(.progress(L("Загрузка…")))
         var request = URLRequest(url: update.downloadURL)
         request.timeoutInterval = 120
 
@@ -217,7 +217,7 @@ enum Updater {
                                          progress: @escaping (InstallStatus) -> Void) {
         var extractionDirectory: URL?
         do {
-            DispatchQueue.main.async { progress(.progress("Проверка подписи…")) }
+            DispatchQueue.main.async { progress(.progress(L("Проверка подписи…"))) }
             let archive = try Data(contentsOf: archiveURL, options: .mappedIfSafe)
             let publicKeys = publicKeys(from: Bundle.main.object(
                 forInfoDictionaryKey: "LaunchpadUpdatePublicKey"))
@@ -374,7 +374,7 @@ enum Updater {
                               String(ProcessInfo.processInfo.processIdentifier),
                               launchdTarget]
             try task.run()
-            progress(.progress("Установка…"))
+            progress(.progress(L("Установка…")))
             NSApp.terminate(nil)
         } catch {
             fail(error, progress: progress)

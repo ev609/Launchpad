@@ -15,21 +15,21 @@ struct KeyboardShortcutHelpView: View {
     }
 
     private let navigation = [
-        Shortcut(keys: "←  ↑  ↓  →", action: "Выбрать приложение"),
-        Shortcut(keys: "Tab / ⇧Tab", action: "Следующее / предыдущее"),
-        Shortcut(keys: "Home / End", action: "Начало / конец страницы"),
-        Shortcut(keys: "Page Up / Page Down", action: "Перейти на другую страницу"),
-        Shortcut(keys: "Return / Space", action: "Открыть выбранное"),
-        Shortcut(keys: "Esc", action: "Назад или закрыть Launchpad"),
+        Shortcut(keys: "←  ↑  ↓  →", action: L("Выбрать приложение")),
+        Shortcut(keys: "Tab / ⇧Tab", action: L("Следующее / предыдущее")),
+        Shortcut(keys: "Home / End", action: L("Начало / конец страницы")),
+        Shortcut(keys: "Page Up / Page Down", action: L("Перейти на другую страницу")),
+        Shortcut(keys: "Return / Space", action: L("Открыть выбранное")),
+        Shortcut(keys: "Esc", action: L("Назад или закрыть Launchpad")),
     ]
 
     private let editing = [
-        Shortcut(keys: "⌥ + стрелки", action: "Переставить выбранное"),
-        Shortcut(keys: "⌥⌘← / ⌥⌘→", action: "Объединить с соседом"),
-        Shortcut(keys: "⌥⌘↑", action: "Извлечь приложение из папки"),
-        Shortcut(keys: "⌘Z", action: "Отменить изменение"),
-        Shortcut(keys: "⇧⌘Z", action: "Повторить изменение"),
-        Shortcut(keys: "? / ⌘?", action: "Показать эту памятку"),
+        Shortcut(keys: L("⌥ + стрелки"), action: L("Переставить выбранное")),
+        Shortcut(keys: "⌥⌘← / ⌥⌘→", action: L("Объединить с соседом")),
+        Shortcut(keys: "⌥⌘↑", action: L("Извлечь приложение из папки")),
+        Shortcut(keys: "⌘Z", action: L("Отменить изменение")),
+        Shortcut(keys: "⇧⌘Z", action: L("Повторить изменение")),
+        Shortcut(keys: "? / ⌘?", action: L("Показать эту памятку")),
     ]
 
     var body: some View {
@@ -57,9 +57,9 @@ struct KeyboardShortcutHelpView: View {
                 }
 
                 HStack(alignment: .top, spacing: 32) {
-                    section("Навигация", shortcuts: navigation)
+                    section(L("Навигация"), shortcuts: navigation)
                     Divider()
-                    section("Раскладка", shortcuts: editing)
+                    section(L("Раскладка"), shortcuts: editing)
                 }
 
                 Text("Во время поиска стрелки и Tab выбирают результат, Return запускает приложение.")

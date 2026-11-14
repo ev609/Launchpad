@@ -130,7 +130,7 @@ enum LaunchpadImporter {
                     if apps.count == 1 {
                         pageItems.append(.app(apps[0]))
                     } else {
-                        let title = groupTitle[node.rowid] ?? "Папка"
+                        let title = groupTitle[node.rowid] ?? L("Папка")
                         pageItems.append(.folder(Folder(name: title, apps: apps)))
                     }
                 default:

@@ -1,0 +1,3 @@
+/* Английские значения пользовательских строк Info.plist (исходные — на русском). */
+"NSAppleEventsUsageDescription" = "Launchpad asks Finder to move the selected app to the Trash when additional permissions are required.";
+"NSHumanReadableCopyright" = "Open source. MIT License.";

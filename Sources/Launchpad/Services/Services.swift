@@ -277,7 +277,7 @@ enum AppLauncher {
             DispatchQueue.main.async {
                 if let error {
                     NotificationCenter.default.post(name: .launchpadLaunchFailed,
-                        object: "Не удалось открыть «\(app.name)»: \(error.localizedDescription)")
+                        object: L("Не удалось открыть «%@»: %@", app.name, error.localizedDescription))
                     // Команду запуска уже приняли и скрыли launcher. При редкой
                     // асинхронной ошибке возвращаем его вместе с объяснением.
                     NotificationCenter.default.post(name: .launchpadShouldShow, object: nil)
@@ -410,7 +410,7 @@ final class LayoutStore: @unchecked Sendable {
     }
 
     private func reportSaveFailure(_ error: Error) {
-        let message = "Не удалось сохранить раскладку: \(error.localizedDescription)"
+        let message = L("Не удалось сохранить раскладку: %@", error.localizedDescription)
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: .launchpadLayoutSaveFailed,
                                             object: message)

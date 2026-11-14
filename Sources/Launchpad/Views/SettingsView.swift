@@ -18,9 +18,9 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Сетка") {
-                Stepper("Колонок: \(settings.columns)", value: $settings.columns, in: 4...10)
-                Stepper("Строк: \(settings.rows)", value: $settings.rows, in: 3...8)
-                Text("Всего иконок на странице: \(settings.columns * settings.rows)")
+                Stepper(L("Колонок: %@", String(settings.columns)), value: $settings.columns, in: 4...10)
+                Stepper(L("Строк: %@", String(settings.rows)), value: $settings.rows, in: 3...8)
+                Text(L("Всего иконок на странице: %@", String(settings.columns * settings.rows)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -77,12 +77,12 @@ struct SettingsView: View {
                 }
                 Button("Сбросить (по алфавиту)") {
                     model.resetLayout()
-                    importResult = model.statusMessage ?? "Раскладка сброшена."
+                    importResult = model.statusMessage ?? L("Раскладка сброшена.")
                 }
                 Button("Обновить список приложений") {
                     Task {
                         await model.refreshApps()
-                        importResult = model.statusMessage ?? "Список приложений обновлён."
+                        importResult = model.statusMessage ?? L("Список приложений обновлён.")
                     }
                 }
                 .disabled(model.isScanning)
@@ -154,12 +154,12 @@ struct SettingsView: View {
                 LabeledContent("Задержки в последнем свайпе",
                                value: "\(performance.lastSwipeStalls)")
                 LabeledContent("Облегчённый режим включался",
-                               value: "\(performance.adaptiveActivationCount) раз")
+                               value: L("%@ раз", String(performance.adaptiveActivationCount)))
                 Button("Скопировать диагностический отчёт") {
                     let report = Diagnostics.report(model: model)
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(report, forType: .string)
-                    reportStatus = "Отчёт скопирован."
+                    reportStatus = L("Отчёт скопирован.")
                 }
                 if let reportStatus {
                     Text(reportStatus).font(.caption).foregroundStyle(.secondary)
@@ -177,7 +177,7 @@ struct SettingsView: View {
     private func applyStartup(_ change: () -> Bool) {
         startupError = change()
             ? nil
-            : "Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа»."
+            : L("Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа».")
         // Перечитываем фактическое состояние: механизмы взаимоисключающие.
         launchAtLogin = StartupManager.launchesAtLogin
         keepAlive = StartupManager.keepsAlive
@@ -199,9 +199,9 @@ struct SettingsView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
         do {
             try model.exportLayout(to: url)
-            importResult = "Раскладка экспортирована."
+            importResult = L("Раскладка экспортирована.")
         } catch {
-            importResult = "Не удалось экспортировать раскладку: \(error.localizedDescription)"
+            importResult = L("Не удалось экспортировать раскладку: %@", error.localizedDescription)
         }
     }
 
@@ -220,13 +220,13 @@ struct SettingsView: View {
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
-        panel.prompt = "Добавить"
+        panel.prompt = L("Добавить")
         guard panel.runModal() == .OK, let url = panel.url else { return }
         if settings.addCustomDirectory(url.path) {
             notifyDirectoriesChanged()
-            importResult = "Каталог добавлен."
+            importResult = L("Каталог добавлен.")
         } else {
-            importResult = "Этот каталог уже добавлен."
+            importResult = L("Этот каталог уже добавлен.")
         }
     }
 }
@@ -241,7 +241,7 @@ private struct HotkeyRecorder: View {
 
     var body: some View {
         HStack {
-            Button(monitor == nil ? "Записать своё сочетание…" : "Нажмите сочетание (Esc — отмена)") {
+            Button(monitor == nil ? L("Записать своё сочетание…") : L("Нажмите сочетание (Esc — отмена)")) {
                 monitor == nil ? start() : stop()
             }
             if let hint {
@@ -265,7 +265,7 @@ private struct HotkeyRecorder: View {
                 stop()
                 onRecord(hotkey)
             } else {
-                hint = "Добавьте ⌘, ⌥ или ⌃ (без них можно только F1–F20)."
+                hint = L("Добавьте ⌘, ⌥ или ⌃ (без них можно только F1–F20).")
             }
             return nil
         }
