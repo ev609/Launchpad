@@ -503,4 +503,57 @@ final class LaunchpadModelTests: XCTestCase {
         }
     }
 
+    func testNewAppsFillLastPageBeforeCreatingNewOne() async {
+        let (settings, suite) = isolatedSettings()
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        settings.columns = 4
+        settings.rows = 3
+        let old = (0..<14).map { app("old\($0)") }
+        let fresh = (0..<3).map { app("new\($0)") }
+        store.save(Layout(pages: [
+            Page(id: "first", items: old.prefix(12).map { .app($0) }),
+            Page(id: "tail", items: old.suffix(2).map { .app($0) }),
+        ]))
+        await MainActor.run {
+            let model = LaunchpadModel(layoutStore: store, settings: settings,
+                                       scanApps: { old + fresh })
+            model.load()
+            XCTAssertEqual(model.pages.map(\.id), ["first", "tail"])
+            XCTAssertEqual(model.pages[1].items.map(\.id),
+                           (old.suffix(2) + fresh).map { "app:" + $0.id })
+        }
+    }
+
+    func testNewAppsOverflowFullLastPage() async {
+        let (settings, suite) = isolatedSettings()
+        defer { UserDefaults.standard.removePersistentDomain(forName: suite) }
+        settings.columns = 4
+        settings.rows = 3
+        let old = (0..<12).map { app("old\($0)") }
+        let fresh = app("fresh")
+        store.save(Layout(pages: [Page(id: "full", items: old.map { .app($0) })]))
+        await MainActor.run {
+            let model = LaunchpadModel(layoutStore: store, settings: settings,
+                                       scanApps: { old + [fresh] })
+            model.load()
+            XCTAssertEqual(model.pages.count, 2)
+            XCTAssertEqual(model.pages[0].items.count, 12)
+            XCTAssertEqual(model.pages[1].items.map(\.id), ["app:fresh"])
+        }
+    }
+
+    func testScanKeepsUndoHistoryWithoutRemovedApps() async {
+        let a = app("a"), b = app("b"), c = app("c")
+        store.save(Layout(pages: [Page(id: "page", items: [.app(a), .app(b), .app(c)])]))
+        await MainActor.run {
+            let model = LaunchpadModel(layoutStore: store, scanApps: { [a, b, c] })
+            model.load()
+            model.move("app:c", before: "app:a", onPage: 0)
+            XCTAssertTrue(model.canUndo)
+            model.applyScan(AppScanner.ScanResult(apps: [a, c]))
+            XCTAssertTrue(model.canUndo)
+            model.undoLayoutChange()
+            XCTAssertEqual(model.pages.flatMap(\.items).map(\.id), ["app:a", "app:c"])
+        }
+    }
 }

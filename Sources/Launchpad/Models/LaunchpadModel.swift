@@ -171,13 +171,20 @@ final class LaunchpadModel: ObservableObject {
     func importFromSystemLaunchpad() -> Bool {
         let before = snapshot("Импорт раскладки")
         defer { recordChange(before) }
-        guard let db = LaunchpadImporter.defaultDatabaseURL(),
-              let layout = LaunchpadImporter.importLayout(dbURL: db, installed: allApps)
-        else { return false }
+        guard let db = LaunchpadImporter.defaultDatabaseURL() else {
+            statusMessage = "База старого Launchpad не найдена в ~/Library/Application Support/Dock/."
+            return false
+        }
+        guard let layout = LaunchpadImporter.importLayout(dbURL: db, installed: allApps) else {
+            statusMessage = "База старого Launchpad найдена, но прочитать из неё раскладку не удалось."
+            return false
+        }
+        // backupLayout сам сообщает причину отказа.
         guard backupLayout() else { return false }
         pages = reconcile(layout)
         clampCurrentPage()
         save()
+        statusMessage = "Раскладка старого Launchpad импортирована."
         return true
     }
 
@@ -262,7 +269,8 @@ final class LaunchpadModel: ObservableObject {
 
     // MARK: - Реконсиляция с реально установленными приложениями
 
-    /// Убирает удалённые приложения и добавляет новые в конец.
+    /// Убирает удалённые приложения и добавляет новые в конец: сначала в свободные
+    /// слоты последней страницы, лишнее `normalize` переносит на новые страницы.
     private func reconcile(_ layout: Layout) -> [Page] {
         let byID = Dictionary(allApps.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
         var seen = Set<String>()
@@ -293,7 +301,10 @@ final class LaunchpadModel: ObservableObject {
 
         let newApps = allApps.filter { !seen.contains($0.id) }
         if !newApps.isEmpty {
-            result.append(Page(items: newApps.map { .app($0) }))
+            if result.isEmpty {
+                result.append(Page(items: []))
+            }
+            result[result.count - 1].items.append(contentsOf: newApps.map { .app($0) })
         }
         return normalize(result)
     }
@@ -981,13 +992,23 @@ extension LaunchpadModel {
         if hasLoadedLayout {
             // Используем живую раскладку: пользователь мог изменить её во время обхода.
             pages = reconcile(Layout(pages: pages))
+            // История остаётся доступной: снимки приводим к новому набору приложений,
+            // чтобы отмена не вернула удалённое приложение и не потеряла новое.
+            undoStack = undoStack.map(reconciled)
+            redoStack = redoStack.map(reconciled)
+            updateHistoryState()
         } else {
             pages = tryImport() ?? normalize([Page(items: allApps.map { .app($0) })])
             hasLoadedLayout = true
+            clearHistory()
         }
-        clearHistory()
         updateSearchResults()
         save()
+    }
+
+    private func reconciled(_ state: Snapshot) -> Snapshot {
+        Snapshot(pages: reconcile(Layout(pages: state.pages)),
+                 currentPage: state.currentPage, name: state.name)
     }
 
     private func snapshot(_ name: String) -> Snapshot {

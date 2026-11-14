@@ -824,7 +824,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             alert.informativeText = "Страницы и папки старого Launchpad восстановлены."
         } else {
             alert.messageText = "Не удалось импортировать"
-            alert.informativeText = "База данных старого Launchpad не найдена в ~/Library/Application Support/Dock/."
+            alert.informativeText = model.statusMessage ?? "Неизвестная ошибка импорта."
         }
         alert.runModal()
     }

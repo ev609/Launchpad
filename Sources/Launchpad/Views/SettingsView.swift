@@ -53,8 +53,8 @@ struct SettingsView: View {
 
             Section("Раскладка") {
                 Button("Импортировать раскладку старого Launchpad") {
-                    let ok = model.importFromSystemLaunchpad()
-                    importResult = ok ? "Раскладка импортирована." : "База старого Launchpad не найдена."
+                    model.importFromSystemLaunchpad()
+                    importResult = model.statusMessage
                 }
                 Button("Сбросить (по алфавиту)") {
                     model.resetLayout()
