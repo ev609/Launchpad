@@ -6,9 +6,14 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-# Иконка + сборка бандла.
-[ -f Resources/AppIcon.icns ] || ./scripts/make_icon.sh
-./scripts/build_app.sh release
+# Иконка + сборка бандла. LAUNCHPAD_SKIP_BUILD=1 — упаковать уже собранный
+# build/Launchpad.app (так release.sh кладёт в DMG ту же сборку, что и в zip).
+if [[ "${LAUNCHPAD_SKIP_BUILD:-}" == "1" && -d build/Launchpad.app ]]; then
+    echo "==> Использую готовый build/Launchpad.app"
+else
+    [ -f Resources/AppIcon.icns ] || ./scripts/make_icon.sh
+    ./scripts/build_app.sh release
+fi
 
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist)"
 DMG="build/Launchpad-$VERSION.dmg"
