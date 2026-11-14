@@ -838,6 +838,8 @@ final class LaunchpadModel: ObservableObject {
             return false
         }
         removeAppEverywhere(app.id)
+        // Удалили из папки, и она распалась — закрываем оверлей.
+        if let id = openFolderID, folder(withID: id) == nil { closeFolder() }
         allApps.removeAll { $0.id == app.id }
         knownApps.removeAll { $0.id == app.id }
         hiddenApps.removeAll { $0.id == app.id }

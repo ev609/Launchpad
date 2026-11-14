@@ -47,6 +47,20 @@ final class AppDeletionTests: XCTestCase {
     }
 
     @MainActor
+    func testDeletingFromOpenFolderDissolvesItAndClosesOverlay() async {
+        let (model, app) = model { _ in }
+        let other = AppEntry(name: "Other", path: "/Applications/Other.app", bundleID: "test.other")
+        let folder = Folder(name: "Папка", apps: [app, other])
+        model.pages = [Page(items: [.folder(folder)])]
+        model.openFolder(folder.id)
+
+        let deleted = await model.deleteApp(app)
+        XCTAssertTrue(deleted)
+        XCTAssertNil(model.openFolderID)
+        XCTAssertEqual(model.pages.first?.items, [.app(other)])
+    }
+
+    @MainActor
     func testPermissionFailurePreservesApplicationAndReportsError() async {
         let (model, app) = model { _ in throw CocoaError(.fileWriteNoPermission) }
         let pages = model.pages

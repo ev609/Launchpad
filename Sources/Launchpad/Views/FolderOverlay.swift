@@ -126,6 +126,23 @@ struct FolderOverlay: View {
                             .padding(.horizontal, 7)
                             .padding(.bottom, 18)
                     )
+                    // Крестик удаления, как в основной сетке (режим правки или ⌥).
+                    .overlay(alignment: .top) {
+                        if dragAppID == nil && model.showDeleteBadges && model.canDelete(app) {
+                            let badge = min(88, max(58, cellWidth * 0.58)) * 0.26
+                            Button { model.pendingDelete = app } label: {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.system(size: badge))
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(.white, .black.opacity(0.65))
+                                    .frame(width: badge, height: badge)
+                                    .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .offset(x: -min(88, max(58, cellWidth * 0.58)) * 0.46, y: 2)
+                            .help("Удалить «\(app.name)»")
+                        }
+                    }
                     .scaleEffect(dragging ? 1.12 : 1.0)
                     .position(pos)
                     .zIndex(dragging ? 1 : 0)
@@ -135,6 +152,11 @@ struct FolderOverlay: View {
                         Button("Извлечь из папки") { model.extractApp(app.id, fromFolder: folderID) }
                         Button("Скрыть из Launchpad") { model.hideApp(app) }
                         Button("Показать в Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.path)]) }
+                        if model.canDelete(app) {
+                            Button("Удалить «\(app.name)»", role: .destructive) {
+                                model.pendingDelete = app
+                            }
+                        }
                     }
                     .gesture(
                         DragGesture(minimumDistance: 0)
@@ -185,6 +207,9 @@ struct FolderOverlay: View {
                             NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.path)])
                         }
                         Button("Скрыть из Launchpad") { model.hideApp(app) }
+                        if model.canDelete(app) {
+                            Button("Удалить «\(app.name)»") { model.pendingDelete = app }
+                        }
                     }
             }
         }
