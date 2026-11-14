@@ -1,7 +1,7 @@
 import Foundation
 
 /// Приложение, найденное в системе.
-struct AppEntry: Identifiable, Codable, Hashable {
+struct AppEntry: Identifiable, Codable, Hashable, Sendable {
     /// Стабильный идентификатор: bundleID, если есть, иначе путь.
     var id: String
     var name: String
@@ -18,7 +18,7 @@ struct AppEntry: Identifiable, Codable, Hashable {
 }
 
 /// Папка на странице Launchpad.
-struct Folder: Identifiable, Codable, Hashable {
+struct Folder: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var name: String
     var apps: [AppEntry]
@@ -31,7 +31,7 @@ struct Folder: Identifiable, Codable, Hashable {
 }
 
 /// Элемент сетки — приложение или папка.
-enum LaunchpadItem: Identifiable, Codable, Hashable {
+enum LaunchpadItem: Identifiable, Codable, Hashable, Sendable {
     case app(AppEntry)
     case folder(Folder)
 
@@ -59,7 +59,7 @@ enum LaunchpadItem: Identifiable, Codable, Hashable {
 }
 
 /// Одна страница Launchpad.
-struct Page: Identifiable, Codable, Hashable {
+struct Page: Identifiable, Codable, Hashable, Sendable {
     var id: String
     var items: [LaunchpadItem]
 
@@ -70,7 +70,7 @@ struct Page: Identifiable, Codable, Hashable {
 }
 
 /// Полная раскладка (все страницы). Сохраняется на диск.
-struct Layout: Codable {
+struct Layout: Codable, Equatable, Sendable {
     var pages: [Page]
 
     static let empty = Layout(pages: [])
