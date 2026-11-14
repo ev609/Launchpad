@@ -3,23 +3,49 @@ import SwiftUI
 /// Корневой экран Launchpad с жестовым перетаскиванием иконок.
 struct LaunchpadRootView: View {
     @ObservedObject var model: LaunchpadModel
+    @ObservedObject var scrollState: PageScrollState
+    let safeTop: CGFloat
+    let onFirstFrame: () -> Void
     @FocusState private var searchFocused: Bool
 
     // Активное перетаскивание.
     @State private var drag: DragState?
+    /// Отдельный отображаемый индекс позволяет анимировать замену страницы,
+    /// не создавая сразу все страницы и сотни Core Animation textures.
+    @State private var visiblePage: Int
+    @State private var previousPage: Int?
+    @State private var pageTransitionGeneration = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.colorSchemeContrast) private var contrast
+
+    init(model: LaunchpadModel, scrollState: PageScrollState,
+         safeTop: CGFloat = 0, onFirstFrame: @escaping () -> Void = {}) {
+        self.model = model
+        self.scrollState = scrollState
+        self.safeTop = safeTop
+        self.onFirstFrame = onFirstFrame
+        _visiblePage = State(initialValue: model.currentPage)
+    }
     // Кандидат в папку и момент начала наведения (для задержки).
 
     var body: some View {
         GeometryReader { geo in
-            let safeTop = NSScreen.main?.safeAreaInsets.top ?? 0
             let metrics = GridMetrics(size: geo.size, columns: model.columns,
                                       rows: model.rows, safeTop: safeTop)
 
             ZStack {
                 // Фон: размытие рабочего стола + затемнение.
-                VisualEffectView(material: .fullScreenUI, blending: .behindWindow)
-                    .ignoresSafeArea()
-                Color.black.opacity(0.28)
+                if reduceTransparency || scrollState.useLightweightBackground {
+                    Color(red: 0.08, green: 0.09, blue: 0.11)
+                        .ignoresSafeArea()
+                } else {
+                    VisualEffectView(material: .fullScreenUI, blending: .behindWindow)
+                        .ignoresSafeArea()
+                }
+                Color.black.opacity(contrast == .increased ? 0.42
+                                    : (reduceTransparency || scrollState.useLightweightBackground
+                                       ? 0.12 : 0.28))
                     .ignoresSafeArea()
                     .onTapGesture {
                         if model.openFolderID != nil { return }
@@ -66,6 +92,12 @@ struct LaunchpadRootView: View {
                             .position(d.location)
                             .allowsHitTesting(false)
                             .transition(.identity)
+                            // Preview должен сразу появляться под указателем и
+                            // следовать за ним без унаследованной spring-анимации.
+                            .transaction { transaction in
+                                transaction.animation = nil
+                                transaction.disablesAnimations = true
+                            }
                     }
                 }
 
@@ -73,6 +105,11 @@ struct LaunchpadRootView: View {
                 if let id = model.openFolderID {
                     FolderOverlay(folderID: id, model: model)
                         .zIndex(10)
+                }
+
+                if model.showsKeyboardHelp {
+                    KeyboardShortcutHelpView(model: model)
+                        .zIndex(20)
                 }
             }
             .coordinateSpace(name: "root")
@@ -84,13 +121,32 @@ struct LaunchpadRootView: View {
                         }
                     }
             )
-            .onAppear { DispatchQueue.main.async { searchFocused = true } }
+            .onDisappear {
+                model.cancelEdgeHover()
+                model.layoutInteractionActive = false
+            }
+            .onAppear {
+                DispatchQueue.main.async { onFirstFrame() }
+                guard !searchFocused else { return }
+                DispatchQueue.main.async { searchFocused = true }
+                prefetchNeighborIcons(around: model.currentPage)
+            }
+            .onChange(of: model.currentPage) { newPage in
+                prefetchNeighborIcons(around: newPage)
+            }
             .onChange(of: model.openFolderID) { newValue in
                 // При закрытии папки возвращаем фокус полю поиска — иначе первый
                 // клик по фону уходит на переактивацию окна (нужно было два клика).
-                if newValue == nil {
+                if newValue == nil, !searchFocused {
                     DispatchQueue.main.async { searchFocused = true }
                 }
+            }
+            .alert("Не удалось выполнить действие", isPresented: Binding(
+                get: { model.operationError != nil },
+                set: { if !$0 { model.operationError = nil } })) {
+                Button("OK") { model.operationError = nil }
+            } message: {
+                Text(model.operationError ?? "")
             }
             .confirmationDialog(
                 model.pendingDelete.map { "Удалить «\($0.name)»?" } ?? "",
@@ -99,7 +155,14 @@ struct LaunchpadRootView: View {
                 presenting: model.pendingDelete
             ) { app in
                 Button("Переместить в Корзину", role: .destructive) {
-                    model.deleteApp(app)
+                    Task {
+                        // Полноэкранное окно не должно закрывать системный
+                        // запрос разрешения на удаление приложения.
+                        NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
+                        if !(await model.deleteApp(app)) {
+                            NotificationCenter.default.post(name: .launchpadShouldShow, object: nil)
+                        }
+                    }
                 }
                 Button("Отмена", role: .cancel) {}
             } message: { app in
@@ -117,25 +180,82 @@ struct LaunchpadRootView: View {
     // MARK: - Пейджер
 
     private func pager(_ metrics: GridMetrics) -> some View {
-        HStack(spacing: 0) {
-            ForEach(Array(model.pages.enumerated()), id: \.element.id) { index, page in
-                PageView(page: page,
+        let visibleIndex = max(0, min(visiblePage, model.pages.count - 1))
+        // Соседние страницы уже смонтированы до начала анимации. Их offset
+        // меняется вместе с текущей страницей; пересоздания иконок на свайпе нет.
+        var mountedIndexes = Set([visibleIndex - 1, visibleIndex, visibleIndex + 1]
+            .filter { model.pages.indices.contains($0) })
+        if let previousPage, model.pages.indices.contains(previousPage) { mountedIndexes.insert(previousPage) }
+        if let source = drag?.originPage, drag?.fromSearch != true,
+           model.pages.indices.contains(source) { mountedIndexes.insert(source) }
+
+        return ZStack {
+            ForEach(mountedIndexes.sorted(), id: \.self) { index in
+                PageView(page: model.pages[index],
                          pageIndex: index,
                          metrics: metrics,
                          drag: drag,
+                         reduceEffects: scrollState.isInteracting,
                          model: model,
                          onBeginDrag: { item, value in beginDrag(item, value, metrics) },
                          onDragChange: { value in updateDrag(value, metrics) },
                          onDragEnd: { _ in endDrag() })
-                    .frame(width: metrics.size.width)
+                    .frame(width: metrics.size.width, height: metrics.size.height)
+                    .modifier(PageScrollOffsetModifier(
+                        position: scrollState.position,
+                        baseOffset: CGFloat(index - visiblePage) * metrics.size.width))
+                    .allowsHitTesting(index == visibleIndex)
+                    .accessibilityHidden(index != visibleIndex)
+                    .id(model.pages[index].id)
+                    .transition(.identity)
             }
         }
-        .frame(width: metrics.size.width, alignment: .leading)
-        .offset(x: -CGFloat(model.currentPage) * metrics.size.width)
-        .animation(.spring(response: 0.4, dampingFraction: 0.85), value: model.currentPage)
+        .frame(width: metrics.size.width)
+        .clipped()
+        .onAppear { visiblePage = model.currentPage }
+        .onChange(of: model.currentPage) { newPage in
+            let target = max(0, min(newPage, model.pages.count - 1))
+            guard target != visiblePage else { return }
+            previousPage = visiblePage
+            pageTransitionGeneration += 1
+            let generation = pageTransitionGeneration
+            let suppressAnimation = model.suppressNextPageAnimation
+            model.suppressNextPageAnimation = false
+            let animation: Animation? = !suppressAnimation && !reduceMotion
+                && abs(target - visiblePage) == 1
+                ? .easeOut(duration: 0.18) : nil
+            withAnimation(animation) { visiblePage = target }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.22) {
+                guard generation == pageTransitionGeneration else { return }
+                previousPage = nil
+            }
+        }
+        .onChange(of: model.pages.count) { _ in
+            if !model.pages.indices.contains(visiblePage) { visiblePage = model.currentPage }
+        }
         // Свайп-жеста здесь НЕТ намеренно: он конкурировал с перетаскиванием иконок.
         // Листание страниц — двухпальцевым скроллом (это scroll, а не drag),
         // стрелками ←/→ и точками внизу.
+    }
+
+    /// После перехода прогреваем ограниченный кеш иконок соседних страниц.
+    private func prefetchNeighborIcons(around pageIndex: Int) {
+        let indexes = [pageIndex - 1, pageIndex + 1]
+            .filter { model.pages.indices.contains($0) }
+        let paths = indexes.flatMap { index in
+            model.pages[index].items.flatMap { item -> [String] in
+                switch item {
+                case .app(let app):
+                    return [app.path]
+                case .folder(let folder):
+                    return folder.apps.prefix(9).map(\.path)
+                }
+            }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard model.currentPage == pageIndex else { return }
+            IconCache.shared.prefetch(paths: paths)
+        }
     }
 
     /// Подсказка-стрелка у края, видна при перетаскивании.
@@ -157,8 +277,8 @@ struct LaunchpadRootView: View {
     private func draggedIcon(_ item: LaunchpadItem, metrics: GridMetrics) -> some View {
         Group {
             switch item {
-            case .app(let app):       AppIconView(app: app)
-            case .folder(let folder): FolderIconView(folder: folder)
+            case .app(let app):       AppIconView(app: app, iconSize: metrics.iconSize)
+            case .folder(let folder): FolderIconView(folder: folder, iconSize: metrics.iconSize)
             }
         }
         .frame(width: metrics.cellW, height: metrics.cellH)
@@ -172,10 +292,18 @@ struct LaunchpadRootView: View {
     private var pageDots: some View {
         HStack(spacing: 10) {
             ForEach(model.pages.indices, id: \.self) { index in
-                Circle()
-                    .fill(index == model.currentPage ? Color.white : Color.white.opacity(0.35))
-                    .frame(width: 8, height: 8)
-                    .onTapGesture { withAnimation { model.goToPage(index) } }
+                Button { model.goToPage(index) } label: {
+                    Circle()
+                        .fill(index == model.currentPage ? Color.white
+                              : Color.white.opacity(contrast == .increased ? 0.68 : 0.35))
+                        .frame(width: 8, height: 8)
+                        .frame(width: 20, height: 20)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Страница \(index + 1)"))
+                .accessibilityValue(index == model.currentPage ? "Выбрано" : "")
+                .accessibilityIdentifier("page.\(index)")
             }
         }
         .frame(height: 20)
@@ -184,19 +312,23 @@ struct LaunchpadRootView: View {
     // MARK: - Логика перетаскивания
 
     private func beginDrag(_ item: LaunchpadItem, _ value: DragGesture.Value, _ metrics: GridMetrics) {
+        model.layoutInteractionActive = true
         let origin = model.pageIndex(of: item.id) ?? model.currentPage
         var state = DragState(itemID: item.id,
                               originPage: origin,
                               location: value.location,
                               insertionIndex: 0,
                               folderTargetID: nil)
-        drag = state
+        // Сначала полностью вычисляем слот, затем публикуем DragState один раз.
+        // Промежуточный insertionIndex=0 заставлял оригинал анимированно
+        // улетать в верхний левый слот перед исчезновением.
         updateDrag(value, metrics, initial: &state)
     }
 
     /// Начало драга из результатов поиска: приложение уже есть в раскладке,
     /// перемещаем его на выбранную страницу.
     private func beginSearchDrag(_ app: AppEntry, _ value: DragGesture.Value, _ metrics: GridMetrics) {
+        model.layoutInteractionActive = true
         var state = DragState(itemID: "app:" + app.id,
                               originPage: model.currentPage,
                               location: value.location,
@@ -204,7 +336,6 @@ struct LaunchpadRootView: View {
                               folderTargetID: nil,
                               fromSearch: true,
                               searchApp: app)
-        drag = state
         updateDrag(value, metrics, initial: &state)
     }
 
@@ -284,6 +415,17 @@ struct LaunchpadRootView: View {
         }
         drag = nil
         model.pruneEmptyPages()
+        model.layoutInteractionActive = false
+    }
+}
+
+/// Изолирует высокочастотное движение слоя от пересчёта всего корневого View.
+private struct PageScrollOffsetModifier: ViewModifier {
+    @ObservedObject var position: PageScrollPosition
+    let baseOffset: CGFloat
+
+    func body(content: Content) -> some View {
+        content.offset(x: baseOffset + position.value)
     }
 }
 
@@ -301,38 +443,67 @@ struct SearchResultsView: View {
     }
 
     var body: some View {
+        ScrollViewReader { proxy in
         ScrollView {
             LazyVGrid(columns: columns, spacing: 28) {
                 ForEach(model.searchResults) { app in
                     AppIconView(app: app)
                         .frame(width: 120, height: 128)
-                        .onTapGesture {
-                            AppLauncher.launch(app)
-                            NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
-                        }
+                        .background(RoundedRectangle(cornerRadius: 14)
+                            .fill(.white.opacity(model.selectedSearchID == app.id ? 0.18 : 0)))
+                        .overlay(RoundedRectangle(cornerRadius: 14)
+                            .stroke(.white.opacity(model.selectedSearchID == app.id ? 0.7 : 0), lineWidth: 2))
+                        .id(app.id)
                         .highPriorityGesture(
-                            DragGesture(minimumDistance: 8, coordinateSpace: .named("root"))
+                            DragGesture(minimumDistance: 0, coordinateSpace: .named("root"))
                                 .onChanged { value in
+                                    guard hypot(value.translation.width,
+                                                value.translation.height) >= 10 else { return }
                                     if draggingAppID == nil {
                                         draggingAppID = app.id
                                         onBeginDrag(app, value)
-                                    } else {
+                                    } else if draggingAppID == app.id {
                                         onDragChange(value)
                                     }
                                 }
                                 .onEnded { value in
-                                    draggingAppID = nil
-                                    onDragEnd(value)
+                                    if draggingAppID == app.id {
+                                        draggingAppID = nil
+                                        onDragEnd(value)
+                                    } else {
+                                        AppLauncher.launch(app)
+                                    }
                                 }
                         )
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(Text(app.name))
+                        .accessibilityIdentifier("search." + app.id)
+                        .accessibilityAddTraits(.isButton)
+                        .accessibilityValue(model.selectedSearchID == app.id ? "Выбрано" : "")
+                        .accessibilityAction { AppLauncher.launch(app) }
                 }
             }
             .padding(.horizontal, 80)
             .padding(.top, 30)
             .frame(maxWidth: .infinity, minHeight: 700, alignment: .top)
         }
+        .overlay(alignment: .top) {
+            if model.searchResults.isEmpty {
+                VStack(spacing: 8) {
+                    Text("Ничего не найдено").font(.title2)
+                    Text("Попробуйте другое название или сокращение.").foregroundStyle(.secondary)
+                }
+                .foregroundStyle(.white)
+                .padding(.top, 60)
+                .allowsHitTesting(false)
+            }
+        }
+        .onChange(of: model.selectedSearchID) { id in
+            if let id { proxy.scrollTo(id) }
+        }
         .contentShape(Rectangle())
         // Клик по пустому месту результатов сбрасывает поиск (иконки перехватывают свой tap).
         .onTapGesture { model.searchText = "" }
+        }
     }
 }

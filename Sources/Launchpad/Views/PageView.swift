@@ -16,6 +16,9 @@ struct GridMetrics {
     var gridHeight: CGFloat { max(1, size.height - topInset - bottomInset) }
     var cellW: CGFloat { max(1, (size.width - 2 * sidePad) / CGFloat(columns)) }
     var cellH: CGFloat { max(1, gridHeight / CGFloat(rows)) }
+    /// Иконки уменьшаются на плотных сетках и небольших экранах, но не
+    /// разрастаются сверх привычного размера Launchpad на больших дисплеях.
+    var iconSize: CGFloat { min(88, max(32, min(cellW * 0.62, cellH - 24))) }
 
     /// Центр слота с индексом `slot`.
     func center(_ slot: Int) -> CGPoint {
@@ -48,18 +51,26 @@ struct DragState {
 
 /// Одна страница сетки. Иконки расставлены вручную по слотам, чтобы поддержать
 /// расступание и «дыру» под перетаскиваемый элемент.
+@MainActor
 struct PageView: View {
     let page: Page
     let pageIndex: Int
     let metrics: GridMetrics
     let drag: DragState?
-    @ObservedObject var model: LaunchpadModel
+    let reduceEffects: Bool
+    /// Владельцем наблюдения остаётся LaunchpadRootView. Если каждая из трёх
+    /// смонтированных страниц подписана на всю модель отдельно, одно изменение
+    /// `@Published` порождает до четырёх независимых проходов SwiftUI.
+    let model: LaunchpadModel
 
     let onBeginDrag: (LaunchpadItem, DragGesture.Value) -> Void
     let onDragChange: (DragGesture.Value) -> Void
     let onDragEnd: (DragGesture.Value) -> Void
 
     @State private var wiggle = false
+    @State private var draggingItemID: String?
+    @State private var longPressedItemID: String?
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         ZStack(alignment: .topLeading) {
@@ -83,7 +94,12 @@ struct PageView: View {
                     // иначе SwiftUI уничтожит view вместе с активным жестом и драг «зависнет».
                     .opacity(placed.dragged ? 0 : 1)
                     .position(metrics.center(placed.slot))
-                    .animation(.spring(response: 0.32, dampingFraction: 0.75), value: placed.slot)
+                    // Соседи плавно расступаются, но перетаскиваемый оригинал
+                    // должен исчезнуть мгновенно. Иначе opacity и position тоже
+                    // интерполируются, создавая видимый «клон», летящий к дыре.
+                    .animation(placed.dragged || reduceEffects ? nil : .spring(response: 0.32,
+                                                                               dampingFraction: 0.75),
+                               value: placed.slot)
             }
         }
     }
@@ -125,7 +141,8 @@ struct PageView: View {
     @ViewBuilder
     private func cell(_ item: LaunchpadItem) -> some View {
         let isFolderTarget = drag?.folderTargetID == item.id
-        let wiggling = model.showDeleteBadges && drag == nil
+        let isKeyboardSelected = model.selectedGridItemID == item.id && pageIndex == model.currentPage
+        let wiggling = model.showDeleteBadges && drag == nil && !reduceEffects
         content(item)
             .scaleEffect(isFolderTarget ? 1.22 : 1.0)
             .background(
@@ -140,35 +157,113 @@ struct PageView: View {
                     .padding(.top, 2)
                     .padding(.bottom, 24)
             )
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isFolderTarget)
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(.white.opacity(isKeyboardSelected
+                                         ? (contrast == .increased ? 0.20 : 0.10) : 0))
+                    .padding(.horizontal, 7)
+                    .padding(.top, 1)
+                    .padding(.bottom, 23)
+                    .allowsHitTesting(false)
+            )
+            .animation(reduceEffects ? nil : .spring(response: 0.3, dampingFraction: 0.7),
+                       value: isFolderTarget)
             // Покачивание в режиме редактирования (как в оригинале).
             .rotationEffect(.degrees(wiggling ? (wiggle ? 1.6 : -1.6) : 0))
             .animation(wiggling ? .easeInOut(duration: wiggleDuration(item)).repeatForever(autoreverses: true)
                                 : .easeOut(duration: 0.12),
                        value: wiggle)
             .contentShape(Rectangle())
-            .onTapGesture { activate(item) }
             // Долгое нажатие → режим редактирования. simultaneousGesture, чтобы
             // работать параллельно с драгом (иначе highPriority-драг его глушит).
             .simultaneousGesture(
                 LongPressGesture(minimumDuration: 0.5)
-                    .onEnded { _ in if case .app = item { model.editing = true } }
+                    .onEnded { _ in
+                        if case .app = item {
+                            longPressedItemID = item.id
+                            model.editing = true
+                        }
+                    }
             )
             .highPriorityGesture(
-                DragGesture(minimumDistance: 5, coordinateSpace: .named("root"))
+                // Один recognizer различает клик и drag. Отдельные TapGesture и
+                // DragGesture конкурировали: движение мыши на несколько точек
+                // отменяло tap, но ещё не начинало drag — и клик пропадал.
+                DragGesture(minimumDistance: 0, coordinateSpace: .named("root"))
                     .onChanged { value in
-                        if drag == nil {
+                        guard hypot(value.translation.width, value.translation.height) >= 10 else {
+                            return
+                        }
+                        if draggingItemID == nil {
+                            draggingItemID = item.id
+                            longPressedItemID = nil
                             onBeginDrag(item, value)
-                        } else {
+                        } else if draggingItemID == item.id {
                             onDragChange(value)
                         }
                     }
-                    .onEnded { value in onDragEnd(value) }
+                    .onEnded { value in
+                        if draggingItemID == item.id {
+                            draggingItemID = nil
+                            onDragEnd(value)
+                        } else if longPressedItemID == item.id {
+                            longPressedItemID = nil
+                        } else {
+                            model.selectedGridItemID = item.id
+                            activate(item)
+                        }
+                    }
             )
             .contextMenu {
-                if case .app(let app) = item, model.canDelete(app) {
-                    Button("Удалить «\(app.name)»", role: .destructive) {
-                        model.pendingDelete = app
+                if case .app(let app) = item {
+                    Button("Скрыть из Launchpad") { model.hideApp(app) }
+                    if model.canDelete(app) {
+                        Button("Удалить «\(app.name)»", role: .destructive) {
+                            model.pendingDelete = app
+                        }
+                    }
+                }
+            }
+            // Кнопка — сосед слоя с жестами, а не его потомок: иначе
+            // highPriorityGesture перехватывает крестик как запуск/drag.
+            .overlay(alignment: .top) {
+                if case .app(let app) = item,
+                   drag == nil && model.showDeleteBadges && model.canDelete(app) {
+                    Button { model.pendingDelete = app } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: metrics.iconSize * 0.26))
+                            .symbolRenderingMode(.palette)
+                            .foregroundStyle(.white, .black.opacity(0.65))
+                            .frame(width: metrics.iconSize * 0.26,
+                                   height: metrics.iconSize * 0.26)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .offset(x: -metrics.iconSize * 0.46, y: -metrics.iconSize * 0.09)
+                    .help("Удалить «\(app.name)»")
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(Text(item.displayName))
+            .accessibilityValue(isKeyboardSelected ? Text("Выбрано") : Text(""))
+            .accessibilityHint(Text(accessibilityHint(for: item)))
+            .accessibilityIdentifier("grid." + item.id)
+            .accessibilityAddTraits(isKeyboardSelected ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { activate(item) }
+            .accessibilityActions {
+                Button("Переместить влево") { move(item, horizontal: -1) }
+                Button("Переместить вправо") { move(item, horizontal: 1) }
+                Button("Переместить вверх") { move(item, vertical: -1) }
+                Button("Переместить вниз") { move(item, vertical: 1) }
+                Button("Объединить с предыдущим") { combine(item, offset: -1) }
+                Button("Объединить со следующим") { combine(item, offset: 1) }
+                if case .app(let app) = item {
+                    Button("Показать в Finder") {
+                        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: app.path)])
+                    }
+                    Button("Скрыть из Launchpad") { model.hideApp(app) }
+                    if model.canDelete(app) {
+                        Button("Удалить «\(app.name)»") { model.pendingDelete = app }
                     }
                 }
             }
@@ -176,7 +271,7 @@ struct PageView: View {
 
     /// Небольшой разброс периода покачивания, чтобы иконки не качались синхронно.
     private func wiggleDuration(_ item: LaunchpadItem) -> Double {
-        0.12 + Double(abs(item.id.hashValue) % 5) * 0.012
+        0.12 + Double(item.id.hashValue.magnitude % 5) * 0.012
     }
 
     @ViewBuilder
@@ -184,10 +279,11 @@ struct PageView: View {
         switch item {
         case .app(let app):
             AppIconView(app: app,
-                        showDelete: drag == nil && model.showDeleteBadges && model.canDelete(app),
-                        onDelete: { model.pendingDelete = app })
+                        iconSize: metrics.iconSize,
+                        reduceEffects: reduceEffects)
         case .folder(let folder):
-            FolderIconView(folder: folder)
+            FolderIconView(folder: folder, iconSize: metrics.iconSize,
+                           reduceEffects: reduceEffects)
         }
     }
 
@@ -195,11 +291,30 @@ struct PageView: View {
         switch item {
         case .app(let app):
             AppLauncher.launch(app)
-            NotificationCenter.default.post(name: .launchpadShouldClose, object: nil)
+
         case .folder(let folder):
             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
-                model.openFolderID = folder.id
+                model.openFolder(folder.id)
             }
         }
+    }
+
+    private func accessibilityHint(for item: LaunchpadItem) -> String {
+        switch item {
+        case .app:
+            return "Нажмите Return, чтобы открыть приложение"
+        case .folder:
+            return "Нажмите Return, чтобы открыть папку"
+        }
+    }
+
+    private func move(_ item: LaunchpadItem, horizontal: Int = 0, vertical: Int = 0) {
+        model.selectedGridItemID = item.id
+        model.moveSelectedGridItem(horizontal: horizontal, vertical: vertical)
+    }
+
+    private func combine(_ item: LaunchpadItem, offset: Int) {
+        model.selectedGridItemID = item.id
+        model.combineSelectedGridItem(withNeighbor: offset)
     }
 }

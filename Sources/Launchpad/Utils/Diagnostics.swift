@@ -28,4 +28,30 @@ enum Diagnostics {
             }
         }
     }
+
+    @MainActor
+    static func report(model: LaunchpadModel) -> String {
+        let metrics = PerformanceMetrics.shared
+        let cache = IconCache.shared.diagnosticSnapshot()
+        let bytes = ByteCountFormatter()
+        bytes.countStyle = .file
+        let appCount = model.pages.flatMap(\.items).flatMap(\.containedApps).count
+        return [
+            "Launchpad diagnostics",
+            "Version: \(Updater.currentVersion)",
+            "Build: \(Updater.currentBuild)",
+            "Build date: \(Updater.buildDateText)",
+            "macOS: \(ProcessInfo.processInfo.operatingSystemVersionString)",
+            "Grid: \(model.columns)x\(model.rows)",
+            "Pages: \(model.pages.count)",
+            "Applications in layout: \(appCount)",
+            "Last show: \(PerformanceMetrics.durationText(metrics.lastShowDuration))",
+            "Last swipe: \(PerformanceMetrics.durationText(metrics.lastSwipeDuration))",
+            "Last scan: \(PerformanceMetrics.durationText(metrics.lastScanDuration))",
+            "Last swipe main-thread stalls: \(metrics.lastSwipeStalls)",
+            "Adaptive mode activations: \(metrics.adaptiveActivationCount)",
+            "Icon RAM cache: \(cache.residentCount) (≈\(bytes.string(fromByteCount: Int64(cache.estimatedResidentBytes))))",
+            "Icon disk cache: \(cache.diskCount) (\(bytes.string(fromByteCount: Int64(cache.diskBytes))))",
+        ].joined(separator: "\n")
+    }
 }

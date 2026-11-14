@@ -17,6 +17,7 @@ enum KeepAliveService {
     /// Включён ли авто-перезапуск (установлен ли агент).
     static var isEnabled: Bool {
         FileManager.default.fileExists(atPath: plistURL.path)
+            && launchctl(["print", "gui/\(getuid())/\(label)"]) == 0
     }
 
     @discardableResult
@@ -51,14 +52,24 @@ enum KeepAliveService {
 
         // Перезагружаем job в текущей сессии.
         bootout()
-        launchctl(["bootstrap", "gui/\(getuid())", plistURL.path])
+        guard launchctl(["bootstrap", "gui/\(getuid())", plistURL.path]) == 0 else {
+            try? FileManager.default.removeItem(at: plistURL)
+            NSLog("KeepAliveService: launchctl bootstrap завершился с ошибкой")
+            return false
+        }
         return true
     }
 
     private static func uninstall() -> Bool {
         bootout()
-        try? FileManager.default.removeItem(at: plistURL)
-        return true
+        guard FileManager.default.fileExists(atPath: plistURL.path) else { return true }
+        do {
+            try FileManager.default.removeItem(at: plistURL)
+            return true
+        } catch {
+            NSLog("KeepAliveService: не удалось удалить агент — \(error.localizedDescription)")
+            return false
+        }
     }
 
     private static func bootout() {

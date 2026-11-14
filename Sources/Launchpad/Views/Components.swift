@@ -20,39 +20,52 @@ struct VisualEffectView: NSViewRepresentable {
     }
 }
 
+/// Иконка подгружается асинхронно: появление новой соседней страницы больше не
+/// блокирует главный поток чтением десятков app-бандлов.
+private struct CachedAppIcon: View {
+    let path: String
+    @State private var image: NSImage?
+
+    private static let placeholder = NSImage(
+        systemSymbolName: "app.fill", accessibilityDescription: nil) ?? NSImage()
+
+    var body: some View {
+        Image(nsImage: image ?? Self.placeholder)
+            .resizable()
+            .interpolation(.high)
+            .onAppear {
+                IconCache.shared.requestIcon(for: path) { loaded in
+                    image = loaded
+                }
+            }
+            .onChange(of: path) { _ in
+                image = nil
+                IconCache.shared.requestIcon(for: path) { loaded in
+                    image = loaded
+                }
+            }
+    }
+}
+
 /// Иконка приложения с подписью.
 struct AppIconView: View {
     let app: AppEntry
     var iconSize: CGFloat = 88
-    /// Показывать крестик удаления (в режиме редактирования).
-    var showDelete: Bool = false
-    var onDelete: () -> Void = {}
+    var reduceEffects = false
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(spacing: 6) {
-            Image(nsImage: IconCache.shared.icon(for: app.path))
-                .resizable()
-                .interpolation(.high)
+            CachedAppIcon(path: app.path)
                 .frame(width: iconSize, height: iconSize)
-                .overlay(alignment: .topLeading) {
-                    if showDelete {
-                        Button(action: onDelete) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: iconSize * 0.26))
-                                .symbolRenderingMode(.palette)
-                                .foregroundStyle(.white, .black.opacity(0.65))
-                        }
-                        .buttonStyle(.plain)
-                        // Крестик сидит точно на верхнем-левом углу иконки.
-                        .offset(x: -iconSize * 0.09, y: -iconSize * 0.09)
-                    }
-                }
             Text(app.name)
                 .font(.system(size: 12))
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                .shadow(color: .black.opacity(reduceEffects ? 0 : (contrast == .increased ? 0.9 : 0.6)),
+                        radius: reduceEffects ? 0 : (contrast == .increased ? 3 : 2),
+                        y: reduceEffects ? 0 : 1)
         }
     }
 }
@@ -61,14 +74,17 @@ struct AppIconView: View {
 struct FolderIconView: View {
     let folder: Folder
     var iconSize: CGFloat = 88
+    var reduceEffects = false
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         VStack(spacing: 6) {
             RoundedRectangle(cornerRadius: iconSize * 0.22, style: .continuous)
-                .fill(.white.opacity(0.18))
+                .fill(.white.opacity(contrast == .increased ? 0.32 : 0.18))
                 .overlay(
                     RoundedRectangle(cornerRadius: iconSize * 0.22, style: .continuous)
-                        .stroke(.white.opacity(0.15), lineWidth: 1)
+                        .stroke(.white.opacity(contrast == .increased ? 0.65 : 0.15),
+                                lineWidth: contrast == .increased ? 2 : 1)
                 )
                 .frame(width: iconSize, height: iconSize)
                 .overlay(miniGrid.padding(iconSize * 0.13))
@@ -77,7 +93,9 @@ struct FolderIconView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .shadow(color: .black.opacity(0.6), radius: 2, y: 1)
+                .shadow(color: .black.opacity(reduceEffects ? 0 : (contrast == .increased ? 0.9 : 0.6)),
+                        radius: reduceEffects ? 0 : (contrast == .increased ? 3 : 2),
+                        y: reduceEffects ? 0 : 1)
         }
     }
 
@@ -85,9 +103,7 @@ struct FolderIconView: View {
         let cols = Array(repeating: GridItem(.flexible(), spacing: 3), count: 3)
         return LazyVGrid(columns: cols, spacing: 3) {
             ForEach(Array(folder.apps.prefix(9))) { app in
-                Image(nsImage: IconCache.shared.icon(for: app.path))
-                    .resizable()
-                    .interpolation(.high)
+                CachedAppIcon(path: app.path)
                     .aspectRatio(contentMode: .fit)
             }
         }
@@ -98,6 +114,7 @@ struct FolderIconView: View {
 struct SearchField: View {
     @Binding var text: String
     var focused: FocusState<Bool>.Binding
+    @Environment(\.colorSchemeContrast) private var contrast
 
     var body: some View {
         HStack(spacing: 6) {
@@ -107,6 +124,10 @@ struct SearchField: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 15))
                 .foregroundStyle(.white)
+                // Поле специально остаётся первым responder, чтобы поиск сразу
+                // принимал ввод с клавиатуры. У пустого поля скрываем мигающую
+                // каретку; после первого символа она появляется как обычно.
+                .tint(text.isEmpty ? .clear : .white.opacity(0.9))
                 .focused(focused)
                 .frame(width: 220)
             if !text.isEmpty {
@@ -122,7 +143,14 @@ struct SearchField: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 8)
         .background(
-            Capsule().fill(.white.opacity(0.15))
+            Capsule()
+                .fill(.white.opacity(contrast == .increased ? 0.28 : 0.15))
+                .overlay(
+                    Capsule().stroke(.white.opacity(contrast == .increased ? 0.75 : 0),
+                                     lineWidth: 2)
+                )
         )
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text("Поиск приложений"))
     }
 }
