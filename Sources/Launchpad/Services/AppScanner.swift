@@ -28,14 +28,25 @@ enum AppScanner {
     /// временно недоступный каталог не означает удаление его приложений.
     static func scanResult(paths: [String] = searchPaths) -> ScanResult {
         var found: [String: AppEntry] = [:]
+        var seenPaths = Set<String>()
         var unavailable: [String] = []
         for base in paths {
-            for path in appPaths(in: base, depth: 1, unavailable: &unavailable) {
-                if let entry = autoreleasepool(invoking: { makeEntry(path: path) }) {
-                    if found[entry.id] == nil { found[entry.id] = entry }
-                } else {
+            // Симлинк на тот же бандл (Xcode.app → Xcode-16.app) — не вторая копия.
+            for path in appPaths(in: base, depth: 1, unavailable: &unavailable)
+            where seenPaths.insert((path as NSString).resolvingSymlinksInPath).inserted {
+                guard let entry = autoreleasepool(invoking: { makeEntry(path: path) }) else {
                     unavailable.append(path)
+                    continue
                 }
+                guard let primary = found[entry.id] else {
+                    found[entry.id] = entry
+                    continue
+                }
+                // Вторая копия с тем же bundleID (бета, копия в ~/Applications):
+                // раньше она молча пропадала. Основной остаётся первая по порядку
+                // каталогов (/Applications раньше прочих) — её id не меняется.
+                let copy = secondaryCopy(entry, primaryName: primary.name)
+                if found[copy.id] == nil { found[copy.id] = copy }
             }
         }
         return ScanResult(apps: found.values.sorted {
@@ -75,7 +86,22 @@ enum AppScanner {
         let bundleID = bundle.bundleIdentifier
         return AppEntry(name: displayName(path: path, bundle: bundle),
                         path: path,
-                        bundleID: bundleID)
+                        bundleID: bundleID,
+                        category: bundle.object(forInfoDictionaryKey: "LSApplicationCategoryType") as? String)
+    }
+
+    /// Вторая копия получает собственный id, а при совпадении имени —
+    /// имя папки в скобках, чтобы копии различались в сетке и поиске.
+    static func secondaryCopy(_ entry: AppEntry, primaryName: String) -> AppEntry {
+        var name = entry.name
+        if name.localizedCaseInsensitiveCompare(primaryName) == .orderedSame {
+            let folder = FileManager.default.displayName(
+                atPath: (entry.path as NSString).deletingLastPathComponent)
+            name += " (\(folder))"
+        }
+        return AppEntry(name: name, path: entry.path, bundleID: entry.bundleID,
+                        category: entry.category,
+                        id: (entry.bundleID ?? entry.path) + "@" + entry.path)
     }
 
     private static func displayName(path: String, bundle: Bundle) -> String {
@@ -83,8 +109,13 @@ enum AppScanner {
         if let name = bundle.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String { return name }
         // Локализованное имя из Finder (учитывает .localized папки).
         let finderName = FileManager.default.displayName(atPath: path)
-        if !finderName.isEmpty { return finderName.replacingOccurrences(of: ".app", with: "") }
+        if !finderName.isEmpty { return strippingAppExtension(finderName) }
         if let name = bundle.object(forInfoDictionaryKey: "CFBundleName") as? String { return name }
-        return (path as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
+        return strippingAppExtension((path as NSString).lastPathComponent)
+    }
+
+    /// Убирает только расширение в конце: «Foo.app Helper» не должен терять «.app».
+    static func strippingAppExtension(_ name: String) -> String {
+        name.lowercased().hasSuffix(".app") ? String(name.dropLast(4)) : name
     }
 }

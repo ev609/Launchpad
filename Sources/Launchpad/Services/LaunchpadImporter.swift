@@ -50,7 +50,10 @@ enum LaunchpadImporter {
         // Индекс установленных приложений по bundleID (в нижнем регистре).
         var byBundle: [String: AppEntry] = [:]
         for app in installed {
-            if let b = app.bundleID?.lowercased() { byBundle[b] = app }
+            // Старый Launchpad знает только bundleID — сопоставляем с основной копией.
+            if let b = app.bundleID?.lowercased(), byBundle[b] == nil || app.isPrimaryCopy {
+                byBundle[b] = app
+            }
         }
 
         // Читаем дерево элементов.

@@ -76,11 +76,32 @@ final class AppScannerTests: XCTestCase {
         XCTAssertEqual(result.unavailablePaths, [missing])
     }
 
-    func testDuplicateBundleIDsAndEmbeddedHelpersDoNotDuplicateApps() throws {
+    func testSecondCopyWithSameBundleIDGetsOwnIDAndHelpersAreSkipped() throws {
         _ = try makeApp("First.app", id: "same")
-        _ = try makeApp("Second.app", id: "same")
+        let second = try makeApp("Second.app", id: "same")
         _ = try makeApp("First.app/Contents/Helper.app", id: "helper")
         let result = AppScanner.scanResult(paths: [directory.path])
-        XCTAssertEqual(result.apps.map(\.id), ["same"])
+        XCTAssertEqual(result.apps.map(\.id), ["same", "same@" + second.path])
+        XCTAssertEqual(result.apps.filter(\.isPrimaryCopy).map(\.name), ["First"])
+    }
+
+    func testSymlinkToSameBundleIsNotACopy() throws {
+        let app = try makeApp("Real.app", id: "real")
+        try FileManager.default.createSymbolicLink(
+            at: directory.appendingPathComponent("Alias.app"), withDestinationURL: app)
+        XCTAssertEqual(AppScanner.scanResult(paths: [directory.path]).apps.count, 1)
+    }
+
+    func testSecondCopyWithSameNameShowsFolder() {
+        let entry = AppEntry(name: "Xcode", path: "/Users/me/Applications/Xcode.app", bundleID: "x")
+        let copy = AppScanner.secondaryCopy(entry, primaryName: "Xcode")
+        XCTAssertEqual(copy.id, "x@/Users/me/Applications/Xcode.app")
+        XCTAssertTrue(copy.name.hasPrefix("Xcode ("))
+        XCTAssertFalse(copy.isPrimaryCopy)
+    }
+
+    func testOnlyTrailingAppExtensionIsStripped() {
+        XCTAssertEqual(AppScanner.strippingAppExtension("Safari.app"), "Safari")
+        XCTAssertEqual(AppScanner.strippingAppExtension("My.app Helper"), "My.app Helper")
     }
 }

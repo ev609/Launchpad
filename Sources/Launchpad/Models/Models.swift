@@ -8,13 +8,21 @@ struct AppEntry: Identifiable, Codable, Hashable, Sendable {
     /// Абсолютный путь к бандлу `.app`.
     var path: String
     var bundleID: String?
+    /// `LSApplicationCategoryType` — по нему называется новая папка.
+    var category: String?
 
-    init(name: String, path: String, bundleID: String?) {
+    /// `id` по умолчанию — bundleID или путь. Явный `id` нужен вторым копиям
+    /// приложения с тем же bundleID (например, бета-версии в другой папке).
+    init(name: String, path: String, bundleID: String?, category: String? = nil, id: String? = nil) {
         self.name = name
         self.path = path
         self.bundleID = bundleID
-        self.id = bundleID ?? path
+        self.category = category
+        self.id = id ?? bundleID ?? path
     }
+
+    /// Основная копия приложения (а не вторая с тем же bundleID).
+    var isPrimaryCopy: Bool { id == (bundleID ?? path) }
 }
 
 /// Папка на странице Launchpad.

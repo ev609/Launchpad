@@ -503,6 +503,17 @@ final class LaunchpadModelTests: XCTestCase {
         }
     }
 
+    func testFolderNameComesFromAppCategory() {
+        let dev = "public.app-category.developer-tools"
+        func app(_ id: String, _ category: String?) -> AppEntry {
+            AppEntry(name: id, path: "/Applications/\(id).app", bundleID: id, category: category)
+        }
+        XCTAssertEqual(LaunchpadModel.suggestedFolderName(for: [app("a", dev), app("b", dev)]), "Разработка")
+        XCTAssertEqual(LaunchpadModel.suggestedFolderName(
+            for: [app("a", "public.app-category.puzzle-games"), app("b", nil)]), "Игры")
+        XCTAssertEqual(LaunchpadModel.suggestedFolderName(for: [app("a", nil), app("b", dev)]), "Папка")
+    }
+
     func testNewAppsFillLastPageBeforeCreatingNewOne() async {
         let (settings, suite) = isolatedSettings()
         defer { UserDefaults.standard.removePersistentDomain(forName: suite) }

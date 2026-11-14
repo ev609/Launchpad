@@ -416,7 +416,7 @@ final class LaunchpadModel: ObservableObject {
                 // Нельзя вложить папку в приложение — игнорируем.
                 return false
             }
-            let folder = Folder(name: suggestedFolderName(for: [targetApp, sourceApp]),
+            let folder = Folder(name: Self.suggestedFolderName(for: [targetApp, sourceApp]),
                                 apps: [targetApp, sourceApp])
             pages[to.page].items[to.index] = .folder(folder)
             removeItem(sourceID)
@@ -521,8 +521,41 @@ final class LaunchpadModel: ObservableObject {
     }
 
     /// Предлагает имя папки по категории приложений (упрощённо — по первому приложению).
-    private func suggestedFolderName(for apps: [AppEntry]) -> String {
-        "Папка"
+    /// Имя новой папки по категории приложений, как в оригинальном Launchpad:
+    /// общая категория, иначе категория приложения, на которое перетащили.
+    nonisolated static func suggestedFolderName(for apps: [AppEntry]) -> String {
+        let categories = apps.compactMap(\.category)
+        let common = Set(categories).count == 1 && categories.count == apps.count ? categories.first : nil
+        guard let category = common ?? apps.first?.category else { return "Папка" }
+        return folderName(forCategory: category) ?? "Папка"
+    }
+
+    nonisolated static func folderName(forCategory category: String) -> String? {
+        let key = category.lowercased().replacingOccurrences(of: "public.app-category.", with: "")
+        if key == "games" || key.hasSuffix("-games") { return "Игры" }
+        let names: [String: String] = [
+            "business": "Бизнес",
+            "developer-tools": "Разработка",
+            "education": "Образование",
+            "entertainment": "Развлечения",
+            "finance": "Финансы",
+            "graphics-design": "Графика и дизайн",
+            "healthcare-fitness": "Здоровье",
+            "lifestyle": "Образ жизни",
+            "medical": "Медицина",
+            "music": "Музыка",
+            "news": "Новости",
+            "photography": "Фото",
+            "productivity": "Продуктивность",
+            "reference": "Справочники",
+            "social-networking": "Общение",
+            "sports": "Спорт",
+            "travel": "Путешествия",
+            "utilities": "Утилиты",
+            "video": "Видео",
+            "weather": "Погода",
+        ]
+        return names[key]
     }
 
     // MARK: - Навигация
