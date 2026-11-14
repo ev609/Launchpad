@@ -17,10 +17,24 @@ fi
 
 # 3. Установка в /Applications.
 DEST="/Applications/Launchpad.app"
+STAGED="/Applications/Launchpad.app.installing"
+BACKUP="/Applications/Launchpad.app.previous"
 echo "==> Устанавливаю в $DEST"
-rm -rf "$DEST"
-cp -R "build/Launchpad.app" "$DEST"
-codesign --force --deep --sign - "$DEST" 2>/dev/null || true
+rm -rf "$STAGED"
+ditto "build/Launchpad.app" "$STAGED"
+codesign --verify --deep --strict "$STAGED"
+
+rm -rf "$BACKUP"
+if [[ -d "$DEST" ]]; then
+    mv "$DEST" "$BACKUP"
+fi
+if mv "$STAGED" "$DEST"; then
+    rm -rf "$BACKUP"
+else
+    [[ ! -d "$BACKUP" ]] || mv "$BACKUP" "$DEST"
+    echo "Ошибка установки; прежняя версия восстановлена." >&2
+    exit 1
+fi
 
 # Сбрасываем кэш иконок, чтобы новая иконка отобразилась сразу.
 touch "$DEST"

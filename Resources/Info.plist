@@ -20,8 +20,12 @@
 	<string>13.0</string>
 	<key>LSUIElement</key>
 	<true/>
+	<key>LaunchpadUpdatePublicKey</key>
+	<string>UZK9X2msLCoO3LwZdjWowt984J8ixE/mU/yzmKG/10E=</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Launchpad обращается к Finder для перемещения выбранного приложения в Корзину, когда требуются дополнительные права.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>Открытый исходный код. Лицензия MIT.</string>
 	<key>NSSupportsAutomaticGraphicsSwitching</key>
