@@ -33,6 +33,7 @@ private typealias MTContactCallback =
 private typealias MTDeviceCreateListFn = @convention(c) () -> Unmanaged<CFArray>?
 private typealias MTRegisterFn = @convention(c) (MTDeviceRef, MTContactCallback) -> Void
 private typealias MTDeviceFn = @convention(c) (MTDeviceRef, Int32) -> Void
+private typealias MTDeviceStopFn = @convention(c) (MTDeviceRef) -> Void
 
 /// C-callback не может захватывать контекст — обращается к синглтону.
 private func multitouchCallback(_ device: UnsafeMutableRawPointer?,
@@ -48,7 +49,15 @@ private func multitouchCallback(_ device: UnsafeMutableRawPointer?,
 /// Читает касания трекпада и распознаёт щипок «внутрь» несколькими пальцами
 /// (жест открытия старого Launchpad).
 final class MultitouchManager {
-    static var shared: MultitouchManager?
+    // Callback приходит на потоке MultitouchSupport, а экземпляр создаётся
+    // и заменяется на главном — поэтому ссылка под замком и слабая.
+    private static let sharedLock = NSLock()
+    private static weak var sharedInstance: MultitouchManager?
+
+    static var shared: MultitouchManager? {
+        get { sharedLock.lock(); defer { sharedLock.unlock() }; return sharedInstance }
+        set { sharedLock.lock(); sharedInstance = newValue; sharedLock.unlock() }
+    }
 
     /// Вызывается на главном потоке при щипке внутрь (сведение пальцев).
     var onPinchIn: (() -> Void)?
@@ -56,6 +65,8 @@ final class MultitouchManager {
     var onPinchOut: (() -> Void)?
 
     private var devices: [MTDeviceRef] = []
+    /// Список держит устройства живыми: после его освобождения указатели висят.
+    private var deviceList: CFArray?
     private var handle: UnsafeMutableRawPointer?
 
     /// Число найденных трекпад-устройств (для диагностики).
@@ -76,10 +87,12 @@ final class MultitouchManager {
         MultitouchManager.shared = self
     }
 
-    /// Загружает фреймворк и запускает все трекпад-устройства.
+    /// Загружает фреймворк и запускает все трекпад-устройства. Повторный
+    /// вызов без `stop()` ничего не делает.
     func start() {
+        guard devices.isEmpty else { return }
         let path = "/System/Library/PrivateFrameworks/MultitouchSupport.framework/MultitouchSupport"
-        guard let h = dlopen(path, RTLD_NOW) else { return }
+        guard let h = handle ?? dlopen(path, RTLD_NOW) else { return }
         handle = h
 
         guard let createSym = dlsym(h, "MTDeviceCreateList"),
@@ -91,6 +104,7 @@ final class MultitouchManager {
         let deviceStart = unsafeBitCast(startSym, to: MTDeviceFn.self)
 
         guard let list = createList()?.takeRetainedValue() else { return }
+        deviceList = list
         let n = CFArrayGetCount(list)
         for i in 0..<n {
             guard let raw = CFArrayGetValueAtIndex(list, i) else { continue }
@@ -99,6 +113,29 @@ final class MultitouchManager {
             deviceStart(device, 0)
             devices.append(device)
         }
+    }
+
+    /// Останавливает устройства: жест выключен в настройках или нужен
+    /// перезапуск после сна (устройства пересоздаются системой).
+    func stop() {
+        guard let h = handle, !devices.isEmpty else { return }
+        let unregister = dlsym(h, "MTUnregisterContactFrameCallback")
+            .map { unsafeBitCast($0, to: MTRegisterFn.self) }
+        let deviceStop = dlsym(h, "MTDeviceStop").map { unsafeBitCast($0, to: MTDeviceStopFn.self) }
+        for device in devices {
+            unregister?(device, multitouchCallback)
+            deviceStop?(device)
+        }
+        devices = []
+        deviceList = nil
+        resetGesture()
+    }
+
+    /// Заново находит трекпады: после сна и при подключении Magic Trackpad
+    /// старый список устройств перестаёт присылать касания.
+    func restart() {
+        stop()
+        start()
     }
 
     /// Обрабатывает кадр касаний. Щипок отличается от свайпа смены пространств

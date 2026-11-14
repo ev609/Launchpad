@@ -18,6 +18,18 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertEqual(restored.hiddenAppIDs, Set(["example.app"]))
     }
 
+    func testPinchGestureIsOnByDefaultAndPersists() {
+        let suite = "LaunchpadTests.Pinch.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        let settings = AppSettings(defaults: defaults)
+        XCTAssertTrue(settings.pinchGesture)
+        settings.pinchGesture = false
+        XCTAssertFalse(AppSettings(defaults: defaults).pinchGesture)
+    }
+
     func testNavigationStatePersistsAndCanBeCleared() {
         let suite = "LaunchpadTests.Navigation.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

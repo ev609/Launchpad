@@ -57,6 +57,7 @@ final class AppSettings: ObservableObject {
         static let rows = "grid.rows"
         static let hotkey = "hotkey.preset"
         static let autoUpdate = "update.auto"
+        static let pinchGesture = "gesture.pinch"
         static let hiddenAppIDs = "apps.hiddenIDs"
         static let customAppDirectories = "apps.customDirectories"
         static let lastPageID = "navigation.pageID"
@@ -78,6 +79,10 @@ final class AppSettings: ObservableObject {
     @Published var autoUpdate: Bool {
         didSet { defaults.set(autoUpdate, forKey: Keys.autoUpdate) }
     }
+    /// Открывать и закрывать Launchpad щипком трекпада (по умолчанию включено).
+    @Published var pinchGesture: Bool {
+        didSet { defaults.set(pinchGesture, forKey: Keys.pinchGesture) }
+    }
     @Published private(set) var hiddenAppIDs: Set<String> {
         didSet { defaults.set(hiddenAppIDs.sorted(), forKey: Keys.hiddenAppIDs) }
     }
@@ -95,6 +100,7 @@ final class AppSettings: ObservableObject {
         hotkey = HotkeyPreset(rawValue: d.string(forKey: Keys.hotkey) ?? "") ?? .f4
         // Нет сохранённого значения → по умолчанию true.
         autoUpdate = d.object(forKey: Keys.autoUpdate) == nil ? true : d.bool(forKey: Keys.autoUpdate)
+        pinchGesture = d.object(forKey: Keys.pinchGesture) == nil ? true : d.bool(forKey: Keys.pinchGesture)
         hiddenAppIDs = Set(d.stringArray(forKey: Keys.hiddenAppIDs) ?? [])
         customAppDirectories = Self.normalizedDirectories(
             d.stringArray(forKey: Keys.customAppDirectories) ?? [])

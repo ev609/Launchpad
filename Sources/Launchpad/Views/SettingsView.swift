@@ -36,6 +36,13 @@ struct SettingsView: View {
                 Text(error).foregroundStyle(.red).font(.caption)
             }
 
+            Section("Жест") {
+                Toggle("Открывать и закрывать щипком трекпада", isOn: $settings.pinchGesture)
+                Text("Сведение 3–5 пальцев открывает Launchpad, разведение — закрывает. Использует закрытый системный фреймворк трекпада.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             Section("Автозапуск") {
                 Toggle("Запускать при входе в систему", isOn: Binding(
                     get: { launchAtLogin },
@@ -154,6 +161,7 @@ struct SettingsView: View {
         .onChange(of: settings.columns) { _ in notifyChanged() }
         .onChange(of: settings.rows) { _ in notifyChanged() }
         .onChange(of: settings.hotkey) { _ in notifyChanged() }
+        .onChange(of: settings.pinchGesture) { _ in notifyChanged() }
     }
 
     private func applyStartup(_ change: () -> Bool) {

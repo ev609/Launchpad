@@ -100,7 +100,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self, self.window?.isVisible == true, self.model.openFolderID == nil else { return }
             self.hide()
         }
-        if !testingUI { multitouch.start() }
+        if !testingUI { updatePinchGesture() }
 
         // Проверка обновлений при запуске (через 4 с, не мешая старту) и далее
         // каждые 6 часов — меню-бар агент живёт днями без перезапуска.
@@ -304,6 +304,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             MainActor.assumeIsolated {
                 self?.model.applyGridChange()
                 self?.registerHotKeys()
+                if self?.testingUI == false { self?.updatePinchGesture() }
             }
         }
         NotificationCenter.default.addObserver(
@@ -324,6 +325,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             forName: Self.handoverNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.handOver() }
         }
+        // После сна устройства трекпада пересоздаются — старые перестают
+        // присылать касания, и щипок «умирал» до перезапуска приложения.
+        NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.restartPinchGestureAfterWake() }
+        }
         // Смена рабочего стола — закрываем Launchpad (как в оригинале),
         // чтобы он не висел на всех пространствах.
         NSWorkspace.shared.notificationCenter.addObserver(
@@ -334,6 +341,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if self.window?.isVisible == true { self.hide() }
             }
         }
+    }
+
+    private func restartPinchGestureAfterWake() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { [weak self] in
+            MainActor.assumeIsolated {
+                guard let self, !self.testingUI, AppSettings.shared.pinchGesture else { return }
+                self.multitouch.restart()
+            }
+        }
+    }
+
+    private func updatePinchGesture() {
+        if AppSettings.shared.pinchGesture { multitouch.start() } else { multitouch.stop() }
     }
 
     private func restartAppDirectoryWatcher() {
