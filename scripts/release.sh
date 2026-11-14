@@ -56,6 +56,23 @@ SIG="build/Launchpad.zip.sig"
 rm -f "$ZIP"
 ditto -c -k --keepParent build/Launchpad.app "$ZIP"
 
+# Нотаризация — только при подписи Developer ID (LAUNCHPAD_SIGN_IDENTITY) и
+# сохранённом профиле notarytool:
+#   xcrun notarytool store-credentials launchpad-notary --apple-id … --team-id …
+#   LAUNCHPAD_NOTARY_PROFILE=launchpad-notary ./scripts/release.sh x.y.z
+# После неё тикет прикрепляется к .app, и zip пересобирается уже с ним.
+if [[ -n "${LAUNCHPAD_NOTARY_PROFILE:-}" ]]; then
+    [[ -n "${LAUNCHPAD_SIGN_IDENTITY:-}" ]] || {
+        echo "Ошибка: нотаризация требует подписи Developer ID (LAUNCHPAD_SIGN_IDENTITY)." >&2
+        exit 1
+    }
+    echo "==> Нотаризация (может занять несколько минут)"
+    xcrun notarytool submit "$ZIP" --keychain-profile "$LAUNCHPAD_NOTARY_PROFILE" --wait
+    xcrun stapler staple build/Launchpad.app
+    rm -f "$ZIP"
+    ditto -c -k --keepParent build/Launchpad.app "$ZIP"
+fi
+
 # Приватный Ed25519-ключ хранится вне репозитория. Путь можно переопределить
 # переменной LAUNCHPAD_UPDATE_PRIVATE_KEY на релизной машине.
 KEY="${LAUNCHPAD_UPDATE_PRIVATE_KEY:-$HOME/Library/Application Support/Launchpad/update-signing-key.pem}"

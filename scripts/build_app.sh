@@ -61,6 +61,16 @@ BUILD_NUMBER="$(date -u '+%Y%m%d.%H%M%S')"
         "$APP_DIR/Contents/Info.plist"
 echo "==> Версия сборки $BUILD_NUMBER ($BUILD_DATE_UTC)"
 
+# Переводы интерфейса (Resources/<язык>.lproj). Русский — язык исходников,
+# английский — для остальных систем (CFBundleDevelopmentRegion = en).
+for LPROJ in "$ROOT"/Resources/*.lproj; do
+    [[ -d "$LPROJ" ]] || continue
+    cp -R "$LPROJ" "$APP_DIR/Contents/Resources/"
+    for STRINGS in "$APP_DIR/Contents/Resources/$(basename "$LPROJ")"/*.strings; do
+        plutil -lint -s "$STRINGS"
+    done
+done
+
 # Иконка, если есть.
 if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
     cp "$ROOT/Resources/AppIcon.icns" "$APP_DIR/Contents/Resources/AppIcon.icns"
@@ -68,10 +78,20 @@ if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
         "$APP_DIR/Contents/Info.plist" 2>/dev/null || true
 fi
 
-# Ad-hoc подпись, чтобы приложение запускалось без предупреждений Gatekeeper локально.
+# Подпись. По умолчанию ad-hoc. С сертификатом Developer ID:
+#   LAUNCHPAD_SIGN_IDENTITY="Developer ID Application: …" ./scripts/build_app.sh release
+# — тогда hardened runtime и метка времени, как требует нотаризация Apple.
 # Ошибка подписи фатальна: updater проверяет `codesign --verify` и отклонил бы
 # такой релиз уже на машинах пользователей.
-codesign --force --deep --sign - "$APP_DIR"
+SIGN_IDENTITY="${LAUNCHPAD_SIGN_IDENTITY:--}"
+if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    codesign --force --deep --sign - "$APP_DIR"
+else
+    echo "==> Подпись: $SIGN_IDENTITY (hardened runtime)"
+    codesign --force --options runtime --timestamp \
+        --entitlements "$ROOT/Resources/Launchpad.entitlements" \
+        --sign "$SIGN_IDENTITY" "$APP_DIR"
+fi
 codesign --verify --deep --strict "$APP_DIR"
 
 echo "==> Готово: $APP_DIR"
