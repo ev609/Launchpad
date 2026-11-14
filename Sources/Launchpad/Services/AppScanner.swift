@@ -5,7 +5,7 @@ enum AppScanner {
 
     /// Каталоги, где обычно лежат приложения.
     static var searchPaths: [String] {
-        [
+        let standard = [
             "/Applications",
             "/Applications/Utilities",
             "/System/Applications",
@@ -13,52 +13,55 @@ enum AppScanner {
             "/System/Library/CoreServices/Applications",
             NSHomeDirectory() + "/Applications",
         ]
+        return AppDirectoryWatcher.minimalRoots(
+            standard + AppSettings.shared.customAppDirectories)
     }
 
-    /// Дешёвый отпечаток каталогов приложений: даты изменения самих папок.
-    ///
-    /// Нужен, чтобы пересканировать ТОЛЬКО когда состав приложений действительно менялся.
-    /// Полный `scan()` на каждое открытие окна — это лишний обход десятков бандлов и
-    /// заметная задержка перед показом сетки. mtime каталога меняется при добавлении или
-    /// удалении `.app` внутри него, поэтому сравнения отпечатка достаточно.
-    static func fingerprint() -> String {
-        let fm = FileManager.default
-        return searchPaths.map { path -> String in
-            let date = (try? fm.attributesOfItem(atPath: path)[.modificationDate] as? Date) ?? nil
-            return "\(path):\(date?.timeIntervalSince1970 ?? 0)"
-        }.joined(separator: "|")
+    struct ScanResult: Sendable {
+        var apps: [AppEntry]
+        var unavailablePaths: [String] = []
     }
 
-    /// Возвращает уникальный список приложений, отсортированный по имени.
-    static func scan() -> [AppEntry] {
+    static func scan() -> [AppEntry] { scanResult().apps }
+
+    /// Обходит также вложенные каталоги. Ошибки чтения возвращаются отдельно:
+    /// временно недоступный каталог не означает удаление его приложений.
+    static func scanResult(paths: [String] = searchPaths) -> ScanResult {
         var found: [String: AppEntry] = [:]
-        for base in searchPaths {
-            for path in appPaths(in: base, depth: 1) {
-                if let entry = makeEntry(path: path) {
-                    // Приоритет у первого найденного (пользовательские > системные по порядку путей).
+        var unavailable: [String] = []
+        for base in paths {
+            for path in appPaths(in: base, depth: 1, unavailable: &unavailable) {
+                if let entry = autoreleasepool(invoking: { makeEntry(path: path) }) {
                     if found[entry.id] == nil { found[entry.id] = entry }
+                } else {
+                    unavailable.append(path)
                 }
             }
         }
-        return found.values.sorted {
-            $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-        }
+        return ScanResult(apps: found.values.sorted {
+            let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }, unavailablePaths: unavailable)
     }
 
-    /// Ищет `.app` в каталоге, спускаясь максимум на `depth` уровней в обычные папки.
-    private static func appPaths(in base: String, depth: Int) -> [String] {
+    private static func appPaths(in base: String, depth: Int, unavailable: inout [String]) -> [String] {
         let fm = FileManager.default
-        guard let entries = try? fm.contentsOfDirectory(atPath: base) else { return [] }
+        let entries: [String]
+        do {
+            entries = try fm.contentsOfDirectory(atPath: base).sorted()
+        } catch {
+            unavailable.append(base)
+            return []
+        }
         var result: [String] = []
-        for name in entries {
+        for name in entries where !name.hasPrefix(".") {
             let path = base + "/" + name
-            if name.hasSuffix(".app") {
+            if name.lowercased().hasSuffix(".app") {
                 result.append(path)
             } else if depth > 0 {
                 var isDir: ObjCBool = false
-                if fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue,
-                   !name.hasPrefix(".") {
-                    result.append(contentsOf: appPaths(in: path, depth: depth - 1))
+                if fm.fileExists(atPath: path, isDirectory: &isDir), isDir.boolValue {
+                    result.append(contentsOf: appPaths(in: path, depth: depth - 1, unavailable: &unavailable))
                 }
             }
         }
