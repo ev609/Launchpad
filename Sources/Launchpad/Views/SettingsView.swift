@@ -8,8 +8,10 @@ struct SettingsView: View {
     @ObservedObject var model: LaunchpadModel
     @ObservedObject private var performance = PerformanceMetrics.shared
     @State private var importResult: String?
-    @State private var launchAtLogin = LoginItem.isEnabled
-    @State private var keepAlive = KeepAliveService.isEnabled
+    @State private var launchAtLogin = StartupManager.launchesAtLogin
+    @State private var keepAlive = StartupManager.keepsAlive
+    @State private var startupError: String?
+    private let autostartProblem = InstallLocation.autostartProblem
     @State private var reportStatus: String?
 
     var body: some View {
@@ -35,20 +37,20 @@ struct SettingsView: View {
             }
 
             Section("Автозапуск") {
-                Toggle("Запускать при входе в систему", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { newValue in
-                        if !LoginItem.setEnabled(newValue) {
-                            // Откат, если система отклонила.
-                            launchAtLogin = LoginItem.isEnabled
-                        }
-                    }
-                Toggle("Держать запущенным (авто-перезапуск)", isOn: $keepAlive)
-                    .onChange(of: keepAlive) { newValue in
-                        KeepAliveService.setEnabled(newValue)
-                    }
-                Text("Перезапуск при крахе/принудительном завершении и старт при входе. Осознанный «Выйти» уважается.")
+                Toggle("Запускать при входе в систему", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { value in applyStartup { StartupManager.setLaunchAtLogin(value) } }))
+                    .disabled(autostartProblem != nil && !launchAtLogin)
+                Toggle("Держать запущенным (авто-перезапуск)", isOn: Binding(
+                    get: { keepAlive },
+                    set: { value in applyStartup { StartupManager.setKeepAlive(value) } }))
+                    .disabled(autostartProblem != nil && !keepAlive)
+                Text("Перезапуск при крахе/принудительном завершении и старт при входе. Осознанный «Выйти» уважается. При включении Launchpad один раз перезапустится под управлением системы.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                if let message = autostartProblem?.message ?? startupError {
+                    Text(message).font(.caption).foregroundStyle(.red)
+                }
             }
 
             Section("Раскладка") {
@@ -152,6 +154,15 @@ struct SettingsView: View {
         .onChange(of: settings.columns) { _ in notifyChanged() }
         .onChange(of: settings.rows) { _ in notifyChanged() }
         .onChange(of: settings.hotkey) { _ in notifyChanged() }
+    }
+
+    private func applyStartup(_ change: () -> Bool) {
+        startupError = change()
+            ? nil
+            : "Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа»."
+        // Перечитываем фактическое состояние: механизмы взаимоисключающие.
+        launchAtLogin = StartupManager.launchesAtLogin
+        keepAlive = StartupManager.keepsAlive
     }
 
     private func notifyChanged() {

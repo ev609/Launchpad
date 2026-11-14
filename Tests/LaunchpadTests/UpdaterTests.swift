@@ -33,6 +33,13 @@ final class UpdaterTests: XCTestCase {
                                                 publicKeyBase64: publicKey))
     }
 
+    func testPublicKeyListSupportsRotation() {
+        XCTAssertEqual(Updater.publicKeys(from: "old, new"), ["old", "new"])
+        XCTAssertEqual(Updater.publicKeys(from: ["old", " new "]), ["old", "new"])
+        XCTAssertEqual(Updater.publicKeys(from: "single"), ["single"])
+        XCTAssertEqual(Updater.publicKeys(from: nil), [])
+    }
+
     func testInvalidPublicKeyIsRejected() {
         XCTAssertFalse(Updater.isValidSignature(archive: Data(),
                                                 signature: Data(repeating: 0, count: 64),

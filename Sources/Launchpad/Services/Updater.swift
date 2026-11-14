@@ -18,7 +18,22 @@ enum Updater {
         let notes: String
     }
 
+    /// Ход установки: промежуточные шаги и итоговая ошибка различаются типом,
+    /// а не префиксом строки.
+    enum InstallStatus: Equatable {
+        case progress(String)
+        case failed(String)
+
+        var text: String {
+            switch self {
+            case .progress(let text): return text
+            case .failed(let message): return "Ошибка: \(message)"
+            }
+        }
+    }
+
     private enum UpdateError: LocalizedError {
+        case badLocation(String)
         case invalidResponse
         case archiveTooLarge
         case invalidSignature
@@ -29,6 +44,7 @@ enum Updater {
 
         var errorDescription: String? {
             switch self {
+            case .badLocation(let message): return message
             case .invalidResponse: return "некорректный ответ сервера"
             case .archiveTooLarge: return "архив обновления слишком большой"
             case .invalidSignature: return "подпись обновления не прошла проверку"
@@ -127,8 +143,14 @@ enum Updater {
     // MARK: - Загрузка и проверка
 
     static func downloadAndInstall(_ update: Update,
-                                   progress: @escaping (String) -> Void) {
-        progress("Загрузка…")
+                                   progress: @escaping (InstallStatus) -> Void) {
+        // Заменить приложение на образе диска, в карантине или в чужой папке нельзя:
+        // скрипт установки упал бы уже после завершения текущего экземпляра.
+        if let problem = InstallLocation.updateProblem {
+            fail(UpdateError.badLocation(problem.message), progress: progress)
+            return
+        }
+        progress(.progress("Загрузка…"))
         var request = URLRequest(url: update.downloadURL)
         request.timeoutInterval = 120
 
@@ -192,16 +214,16 @@ enum Updater {
     private static func verifyAndPrepare(archiveURL: URL,
                                          signature: Data,
                                          update: Update,
-                                         progress: @escaping (String) -> Void) {
+                                         progress: @escaping (InstallStatus) -> Void) {
         var extractionDirectory: URL?
         do {
-            DispatchQueue.main.async { progress("Проверка подписи…") }
+            DispatchQueue.main.async { progress(.progress("Проверка подписи…")) }
             let archive = try Data(contentsOf: archiveURL, options: .mappedIfSafe)
-            guard let publicKey = Bundle.main.object(
-                forInfoDictionaryKey: "LaunchpadUpdatePublicKey") as? String,
-                  isValidSignature(archive: archive,
-                                   signature: signature,
-                                   publicKeyBase64: publicKey) else {
+            let publicKeys = publicKeys(from: Bundle.main.object(
+                forInfoDictionaryKey: "LaunchpadUpdatePublicKey"))
+            guard publicKeys.contains(where: {
+                isValidSignature(archive: archive, signature: signature, publicKeyBase64: $0)
+            }) else {
                 throw UpdateError.invalidSignature
             }
 
@@ -247,6 +269,21 @@ enum Updater {
         }
     }
 
+    /// Ключи из Info.plist: строка с одним ключом или несколькими через запятую
+    /// либо массив строк. Несколько ключей нужны для ротации: релиз, подписанный
+    /// новым ключом, примут версии, где новый ключ уже добавлен рядом со старым.
+    static func publicKeys(from value: Any?) -> [String] {
+        let raw: [String]
+        if let string = value as? String {
+            raw = string.components(separatedBy: CharacterSet(charactersIn: ",; \n\t"))
+        } else if let array = value as? [String] {
+            raw = array
+        } else {
+            raw = []
+        }
+        return raw.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
     /// Доступно тестам: проверяет Ed25519 без обращения к Bundle или сети.
     static func isValidSignature(archive: Data,
                                  signature: Data,
@@ -263,8 +300,12 @@ enum Updater {
     private static func launchInstaller(newApp: URL,
                                         extractionDirectory: URL,
                                         archiveURL: URL,
-                                        progress: @escaping (String) -> Void) {
+                                        progress: @escaping (InstallStatus) -> Void) {
         let destination = URL(fileURLWithPath: Bundle.main.bundlePath)
+        // Если включён авто-перезапуск, новую версию запускает launchd
+        // (`kickstart`), чтобы она снова была под его защитой. Через `open`
+        // приложение стартовало бы вне задания, и сбой больше не перезапускался бы.
+        let launchdTarget = KeepAliveService.isLoaded ? KeepAliveService.serviceTarget : ""
         let scriptURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("launchpad-update-\(UUID().uuidString).sh")
         let script = """
@@ -274,8 +315,17 @@ enum Updater {
         NEWAPP="$2"
         WORKDIR="$3"
         ARCHIVE="$4"
+        OLDPID="$5"
+        LAUNCHD_TARGET="${6:-}"
         STAGED="${DEST}.update"
         BACKUP="${DEST}.previous"
+
+        relaunch() {
+            if [[ -n "$LAUNCHD_TARGET" ]] && /bin/launchctl kickstart "$LAUNCHD_TARGET"; then
+                return 0
+            fi
+            /usr/bin/open "$DEST"
+        }
 
         relaunch_on_error() {
             STATUS=$?
@@ -283,13 +333,18 @@ enum Updater {
                 if [[ ! -d "$DEST" && -d "$BACKUP" ]]; then
                     /bin/mv "$BACKUP" "$DEST" || true
                 fi
-                [[ ! -d "$DEST" ]] || /usr/bin/open "$DEST"
+                [[ ! -d "$DEST" ]] || relaunch
             fi
             exit $STATUS
         }
         trap relaunch_on_error EXIT
 
-        sleep 1
+        # Ждём завершения текущего экземпляра (не дольше 20 с): заменять бандл
+        # работающей программы и запускать копию раньше времени нельзя.
+        for _ in $(seq 1 100); do
+            /bin/kill -0 "$OLDPID" 2>/dev/null || break
+            sleep 0.2
+        done
         /bin/rm -rf "$STAGED"
         /usr/bin/ditto "$NEWAPP" "$STAGED"
         /usr/bin/codesign --verify --deep --strict "$STAGED"
@@ -297,7 +352,7 @@ enum Updater {
         /bin/mv "$DEST" "$BACKUP"
         if /bin/mv "$STAGED" "$DEST"; then
             /usr/bin/xattr -dr com.apple.quarantine "$DEST" 2>/dev/null || true
-            /usr/bin/open "$DEST"
+            relaunch
             /bin/rm -rf "$BACKUP" "$WORKDIR" "$ARCHIVE"
             /bin/rm -f "$0"
             trap - EXIT
@@ -315,9 +370,11 @@ enum Updater {
                               destination.path,
                               newApp.path,
                               extractionDirectory.path,
-                              archiveURL.path]
+                              archiveURL.path,
+                              String(ProcessInfo.processInfo.processIdentifier),
+                              launchdTarget]
             try task.run()
-            progress("Установка…")
+            progress(.progress("Установка…"))
             NSApp.terminate(nil)
         } catch {
             fail(error, progress: progress)
@@ -335,10 +392,10 @@ enum Updater {
         guard process.terminationStatus == 0 else { throw UpdateError.invalidResponse }
     }
 
-    private static func fail(_ error: Error, progress: @escaping (String) -> Void) {
+    private static func fail(_ error: Error, progress: @escaping (InstallStatus) -> Void) {
         let message = (error as? LocalizedError)?.errorDescription
             ?? error.localizedDescription
-        DispatchQueue.main.async { progress("Ошибка: \(message)") }
+        DispatchQueue.main.async { progress(.failed(message)) }
     }
 }
 

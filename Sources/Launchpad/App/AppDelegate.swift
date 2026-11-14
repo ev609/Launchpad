@@ -59,16 +59,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// Distributed-уведомление «показать Launchpad» (посылается вторым экземпляром).
     static let showNotification = Notification.Name("com.openlaunchpad.show")
+    /// Distributed-уведомление «уступи место»: его посылает экземпляр, запущенный
+    /// LaunchAgent'ом, когда уже работает копия, открытая вручную.
+    static let handoverNotification = Notification.Name("com.openlaunchpad.handover")
+    /// Что открыть после передачи управления: "settings" или "launchpad".
+    private static let handoverReopenKey = "handoverReopen"
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Single-instance guard: если уже запущена копия — просим её показать
         // Launchpad (клик по иконке приложения открывает ланч) и выходим.
-        if isDuplicateInstance() {
-            DistributedNotificationCenter.default().postNotificationName(
-                Self.showNotification, object: nil, userInfo: nil, deliverImmediately: true)
-            NSApp.terminate(nil)
-            return
+        // Исключение — запуск LaunchAgent'ом: иначе после включения авто-перезапуска
+        // задание сразу завершалось бы, и защиты от сбоев не было бы до перезахода.
+        if !otherInstancePIDs().isEmpty {
+            if KeepAliveService.isManagedProcess, takeOverFromRunningInstance() {
+                // Продолжаем запуск как основной экземпляр.
+            } else {
+                DistributedNotificationCenter.default().postNotificationName(
+                    Self.showNotification, object: nil, userInfo: nil, deliverImmediately: true)
+                NSApp.terminate(nil)
+                return
+            }
         }
+        if !testingUI { StartupManager.repairOnLaunch() }
         model.loadCachedLayout()
         buildEditMenu()
         if !testingUI { Task { await model.refreshApps() } }
@@ -98,6 +110,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updateTimer = Timer.scheduledTimer(withTimeInterval: 6 * 3600, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduledUpdateCheck() }
         }
+
+        reopenAfterHandover()
 
         // Тестовый флаг: сразу открыть Launchpad.
         if CommandLine.arguments.contains("--open") {
@@ -170,13 +184,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(.separator())
         let loginItem = NSMenuItem(title: "Запускать при входе",
                                    action: #selector(toggleLoginItem), keyEquivalent: "")
-        loginItem.state = LoginItem.isEnabled ? .on : .off
+        loginItem.state = StartupManager.launchesAtLogin ? .on : .off
         loginItemMenuItem = loginItem
         menu.addItem(loginItem)
 
         let keepAlive = NSMenuItem(title: "Держать запущенным (авто-перезапуск)",
                                    action: #selector(toggleKeepAlive), keyEquivalent: "")
-        keepAlive.state = KeepAliveService.isEnabled ? .on : .off
+        keepAlive.state = StartupManager.keepsAlive ? .on : .off
         keepAliveMenuItem = keepAlive
         menu.addItem(keepAlive)
 
@@ -304,6 +318,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DistributedNotificationCenter.default().addObserver(
             forName: Self.showNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.show() }
+        }
+        // Экземпляр под LaunchAgent'ом забирает управление у открытого вручную.
+        DistributedNotificationCenter.default().addObserver(
+            forName: Self.handoverNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.handOver() }
         }
         // Смена рабочего стола — закрываем Launchpad (как в оригинале),
         // чтобы он не висел на всех пространствах.
@@ -861,20 +880,81 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func toggleLoginItem() {
-        LoginItem.setEnabled(!LoginItem.isEnabled)
-        loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
+        applyStartupChange { StartupManager.setLaunchAtLogin(!StartupManager.launchesAtLogin) }
     }
 
     @objc private func toggleKeepAlive() {
-        KeepAliveService.setEnabled(!KeepAliveService.isEnabled)
-        keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
+        applyStartupChange { StartupManager.setKeepAlive(!StartupManager.keepsAlive) }
     }
 
-    private func isDuplicateInstance() -> Bool {
-        guard let bundleID = Bundle.main.bundleIdentifier else { return false }
-        let me = NSRunningApplication.current
+    private func applyStartupChange(_ change: () -> Bool) {
+        if let problem = InstallLocation.autostartProblem {
+            showStartupAlert(problem.message)
+        } else if !change() {
+            showStartupAlert("Система не дала изменить автозапуск. Проверьте «Системные настройки → Основные → Объекты входа».")
+        }
+        updateStartupMenuState()
+    }
+
+    private func showStartupAlert(_ text: String) {
+        let alert = NSAlert()
+        alert.messageText = "Не удалось изменить автозапуск"
+        alert.informativeText = text
+        alert.runModal()
+    }
+
+    private func updateStartupMenuState() {
+        loginItemMenuItem?.state = StartupManager.launchesAtLogin ? .on : .off
+        keepAliveMenuItem?.state = StartupManager.keepsAlive ? .on : .off
+    }
+
+    private func otherInstancePIDs() -> [pid_t] {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return [] }
+        let me = NSRunningApplication.current.processIdentifier
         return NSRunningApplication.runningApplications(withBundleIdentifier: bundleID)
-            .contains { $0.processIdentifier != me.processIdentifier }
+            .map(\.processIdentifier)
+            .filter { $0 != me }
+    }
+
+    // MARK: - Передача управления экземпляру под LaunchAgent'ом
+
+    /// Просит открытую вручную копию завершиться и ждёт до 10 с.
+    /// false — копия не ответила; тогда этот экземпляр выходит с кодом 0,
+    /// и launchd не перезапускает его.
+    private func takeOverFromRunningInstance() -> Bool {
+        let others = otherInstancePIDs()
+        DistributedNotificationCenter.default().postNotificationName(
+            Self.handoverNotification, object: nil, userInfo: nil, deliverImmediately: true)
+        let deadline = Date().addingTimeInterval(10)
+        while Date() < deadline {
+            if others.allSatisfy({ kill($0, 0) != 0 && errno == ESRCH }) { return true }
+            RunLoop.current.run(mode: .default, before: Date().addingTimeInterval(0.1))
+        }
+        NSLog("Launchpad: работающая копия не уступила управление, выхожу")
+        return false
+    }
+
+    private func handOver() {
+        // Запущенный агентом экземпляр сам основной — не уступаем.
+        guard !KeepAliveService.isManagedProcess else { return }
+        let reopen: String?
+        if settingsWindow?.isVisible == true {
+            reopen = "settings"
+        } else if window?.isVisible == true {
+            reopen = "launchpad"
+        } else {
+            reopen = nil
+        }
+        UserDefaults.standard.set(reopen, forKey: Self.handoverReopenKey)
+        NSApp.terminate(nil)
+    }
+
+    private func reopenAfterHandover() {
+        guard let reopen = UserDefaults.standard.string(forKey: Self.handoverReopenKey) else { return }
+        UserDefaults.standard.removeObject(forKey: Self.handoverReopenKey)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) { [weak self] in
+            if reopen == "settings" { self?.openSettings() } else { self?.show() }
+        }
     }
 
     // MARK: - Первый запуск
@@ -890,21 +970,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let view = OnboardingView(
             onFinish: { [weak self] launchAtLogin, keepAlive, autoUpdate, importLayout in
                 guard let self else { return }
-                let loginOK = LoginItem.isEnabled == launchAtLogin
-                    || LoginItem.setEnabled(launchAtLogin)
-                let keepAliveOK = KeepAliveService.isEnabled == keepAlive
-                    || KeepAliveService.setEnabled(keepAlive)
+                // Сначала сохраняем выбор: включение авто-перезапуска запускает
+                // экземпляр под LaunchAgent'ом, и он не должен снова показать онбординг.
                 AppSettings.shared.autoUpdate = autoUpdate
                 if importLayout { _ = self.model.importFromSystemLaunchpad() }
                 UserDefaults.standard.set(true, forKey: completionKey)
-                self.loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
-                self.keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
+                let locationProblem = (launchAtLogin || keepAlive) ? InstallLocation.autostartProblem : nil
+                let startupOK = locationProblem == nil
+                    && StartupManager.apply(launchAtLogin: launchAtLogin, keepAlive: keepAlive)
+                self.updateStartupMenuState()
                 self.autoUpdateMenuItem?.state = autoUpdate ? .on : .off
                 self.onboardingWindow?.close()
                 self.onboardingWindow = nil
                 self.scheduledUpdateCheck()
-                if !loginOK || !keepAliveOK {
-                    self.model.operationError = "Не все параметры фонового запуска удалось применить. Их можно изменить в настройках."
+                if !startupOK {
+                    self.model.operationError = locationProblem?.message
+                        ?? "Не все параметры фонового запуска удалось применить. Их можно изменить в настройках."
                     self.openSettings()
                 } else {
                     self.show()
@@ -978,7 +1059,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.pendingUpdate = update
                     self.updateMenuItem?.title = "Обновить до \(update.version)…"
                     self.setUpdateStatus("Доступна версия \(update.version)")
-                    if AppSettings.shared.autoUpdate && self.window?.isVisible != true {
+                    if AppSettings.shared.autoUpdate && self.canInstallSilently {
                         self.install(update)
                     }
                 }
@@ -990,9 +1071,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AppSettings.shared.autoUpdate.toggle()
         autoUpdateMenuItem?.state = AppSettings.shared.autoUpdate ? .on : .off
         // Только что включили и обновление уже найдено — поставить сразу (если скрыт).
-        if AppSettings.shared.autoUpdate, let update = pendingUpdate, window?.isVisible != true {
+        if AppSettings.shared.autoUpdate, let update = pendingUpdate, canInstallSilently {
             install(update)
         }
+    }
+
+    /// Тихая установка перезапускает приложение — только когда пользователь
+    /// ничего в нём не делает и бандл вообще можно заменить.
+    private var canInstallSilently: Bool {
+        window?.isVisible != true
+            && settingsWindow?.isVisible != true
+            && onboardingWindow == nil
+            && InstallLocation.updateProblem == nil
     }
 
     private func promptInstall(_ update: Updater.Update) {
@@ -1015,8 +1105,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         Updater.downloadAndInstall(update) { [weak self] status in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.setUpdateStatus(status)
-                if status.hasPrefix("Ошибка:") {
+                self.setUpdateStatus(status.text)
+                if case .failed = status {
                     self.isInstallingUpdate = false
                     self.updateMenuItem?.isEnabled = true
                     self.updateMenuItem?.title = "Повторить обновление до \(update.version)…"
@@ -1050,8 +1140,7 @@ extension AppDelegate: NSMenuDelegate, NSMenuItemValidation {
 
     func menuNeedsUpdate(_ menu: NSMenu) {
         // Актуализируем галочки при открытии меню.
-        loginItemMenuItem?.state = LoginItem.isEnabled ? .on : .off
-        keepAliveMenuItem?.state = KeepAliveService.isEnabled ? .on : .off
+        updateStartupMenuState()
         autoUpdateMenuItem?.state = AppSettings.shared.autoUpdate ? .on : .off
     }
 }

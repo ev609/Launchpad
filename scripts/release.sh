@@ -43,7 +43,8 @@ if [[ ! -f "$KEY" ]]; then
 fi
 EXPECTED_PUBLIC_KEY="$(/usr/libexec/PlistBuddy -c 'Print :LaunchpadUpdatePublicKey' Resources/Info.plist)"
 ACTUAL_PUBLIC_KEY="$(openssl pkey -in "$KEY" -pubout -outform DER 2>/dev/null | tail -c 32 | base64)"
-[[ "$ACTUAL_PUBLIC_KEY" == "$EXPECTED_PUBLIC_KEY" ]] || {
+# Ключей может быть несколько через запятую (ротация) — нужен один из них.
+[[ ",${EXPECTED_PUBLIC_KEY// /}," == *",$ACTUAL_PUBLIC_KEY,"* ]] || {
     echo "Ошибка: приватный ключ не соответствует публичному ключу приложения." >&2
     exit 1
 }
