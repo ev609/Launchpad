@@ -1,0 +1,21 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Validate metadata and scripts
+        run: |
+          plutil -lint Resources/Info.plist
+          for script in scripts/*.sh; do bash -n "$script"; done
+      - name: Build without warnings
+        run: swift build -Xswiftc -warnings-as-errors
+      - name: Test
+        run: swift test
+      - name: Release build
+        run: swift build -c release -Xswiftc -warnings-as-errors

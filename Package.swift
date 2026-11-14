@@ -10,6 +10,11 @@ let package = Package(
         .executableTarget(
             name: "Launchpad",
             path: "Sources/Launchpad"
+        ),
+        .testTarget(
+            name: "LaunchpadTests",
+            dependencies: ["Launchpad"],
+            path: "Tests/LaunchpadTests"
         )
     ]
 )
