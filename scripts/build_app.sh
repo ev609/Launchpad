@@ -8,17 +8,37 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="Launchpad"
 APP_DIR="$ROOT/build/$APP_NAME.app"
 
-echo "==> Сборка ($CONFIG)…"
-cd "$ROOT"
-# Не фильтруем вывод через `... || true`: иначе ошибка компиляции маскируется,
-# а оставшийся в .build старый бинарник ошибочно попадает в новый релиз.
-swift build -c "$CONFIG"
-
-BIN="$ROOT/.build/$CONFIG/$APP_NAME"
-if [[ ! -f "$BIN" ]]; then
-    echo "Ошибка: бинарник не найден: $BIN" >&2
-    exit 1
+# Архитектуры через пробел. Релиз — универсальный (Apple Silicon + Intel),
+# отладка — только родная архитектура, чтобы собиралась быстрее.
+# Переопределение: ARCHS="arm64" ./scripts/build_app.sh release
+if [[ "$CONFIG" == "release" ]]; then
+    ARCHS="${ARCHS:-arm64 x86_64}"
+else
+    ARCHS="${ARCHS:-$(uname -m)}"
 fi
+MIN_MACOS="13.0"
+
+cd "$ROOT"
+SLICES=()
+for ARCH in $ARCHS; do
+    TRIPLE="$ARCH-apple-macosx$MIN_MACOS"
+    echo "==> Сборка ($CONFIG, $ARCH)…"
+    # Не фильтруем вывод через `... || true`: иначе ошибка компиляции маскируется,
+    # а оставшийся в .build старый бинарник ошибочно попадает в новый релиз.
+    swift build -c "$CONFIG" --triple "$TRIPLE"
+    SLICE="$ROOT/.build/$TRIPLE/$CONFIG/$APP_NAME"
+    [[ -f "$SLICE" ]] || SLICE="$ROOT/.build/$ARCH-apple-macosx/$CONFIG/$APP_NAME"
+    if [[ ! -f "$SLICE" ]]; then
+        echo "Ошибка: бинарник для $ARCH не найден" >&2
+        exit 1
+    fi
+    SLICES+=("$SLICE")
+done
+
+BIN="$ROOT/.build/$APP_NAME-$CONFIG-universal"
+rm -f "$BIN"
+lipo -create "${SLICES[@]}" -output "$BIN"
+echo "==> Архитектуры: $(lipo -archs "$BIN")"
 
 echo "==> Сборка бандла $APP_DIR"
 rm -rf "$APP_DIR"
@@ -49,8 +69,10 @@ if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
 fi
 
 # Ad-hoc подпись, чтобы приложение запускалось без предупреждений Gatekeeper локально.
-codesign --force --deep --sign - "$APP_DIR" 2>/dev/null || \
-    echo "(codesign пропущен)"
+# Ошибка подписи фатальна: updater проверяет `codesign --verify` и отклонил бы
+# такой релиз уже на машинах пользователей.
+codesign --force --deep --sign - "$APP_DIR"
+codesign --verify --deep --strict "$APP_DIR"
 
 echo "==> Готово: $APP_DIR"
 echo "    Запуск: open \"$APP_DIR\""
